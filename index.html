@@ -306,9 +306,9 @@
             <button class="tab" data-tab="cierres">Cierre de Lotes</button>
             <button class="tab" data-tab="lotes">Vista Lotes</button>
             <button class="tab" data-tab="ciclos">Control Ciclos</button>
-            <button class="tab" data-tab="cosechado">Cosechado</button>
+            <button class="tab" data-tab="cosechado" id="tab-btn-cosechado">Cosechado</button>
             <button class="tab" data-tab="presupuesto">Presupuesto</button>
-            <button class="tab" data-tab="zonas">Zonas</button>
+            <button class="tab" data-tab="zonas" id="tab-btn-zonas">Zonas</button>
             <button class="tab" data-tab="auxiliares">Auxiliares</button>
         </div>
 
@@ -410,13 +410,13 @@
         <!-- COSECHADO -->
         <div class="tab-content" id="tab-cosechado">
             <div class="grid">
-                <div class="card"><h2>Cosecha del Dia</h2><table id="table-cosechado"><thead><tr><th>Zona</th><th>Ton</th><th>Jornales</th><th>Ton/Jor</th><th>Cuad.</th></tr></thead><tbody></tbody></table></div>
-                <div class="card"><h2>Toneladas por Zona</h2><div class="chart-container"><canvas id="chart-cosecha"></canvas></div></div>
+                <div class="card"><h2 id="h-cosecha-dia">Cosecha del Dia</h2><table id="table-cosechado"><thead><tr><th id="th-cos-group">Zona</th><th>Ton</th><th>Jornales</th><th>Ton/Jor</th><th>Cuad.</th></tr></thead><tbody></tbody></table></div>
+                <div class="card"><h2 id="h-ton-grupo">Toneladas por Zona</h2><div class="chart-container"><canvas id="chart-cosecha"></canvas></div></div>
             </div>
             <div class="grid" style="margin-top:1.25rem">
                 <div class="card full-width">
-                    <h2>Cumplimiento por Zona</h2>
-                    <table id="table-tonzona"><thead><tr><th>Zona</th><th>Presupuesto</th><th>Cosechado</th><th>Cumpl.</th><th style="width:150px">Progreso</th></tr></thead><tbody></tbody></table>
+                    <h2 id="h-cumpl-grupo">Cumplimiento por Zona</h2>
+                    <table id="table-tonzona"><thead><tr><th id="th-tz-group">Zona</th><th>Presupuesto</th><th>Cosechado</th><th>Cumpl.</th><th style="width:150px">Progreso</th></tr></thead><tbody></tbody></table>
                 </div>
             </div>
         </div>
@@ -427,8 +427,8 @@
         <!-- ZONAS -->
         <div class="tab-content" id="tab-zonas">
             <div class="grid">
-                <div class="card"><h2>Distribucion de Hectareas</h2><div class="chart-container"><canvas id="chart-zonas-has"></canvas></div></div>
-                <div class="card"><h2>Detalle por Zona</h2><table id="table-zonas"><thead><tr><th>Zona</th><th>Tipo</th><th>Has</th></tr></thead><tbody></tbody></table></div>
+                <div class="card"><h2 id="h-dist-has">Distribucion de Hectareas</h2><div class="chart-container"><canvas id="chart-zonas-has"></canvas></div></div>
+                <div class="card"><h2 id="h-detalle-zona">Detalle por Zona</h2><table id="table-zonas"><thead><tr><th id="th-zonas-group">Zona</th><th>Tipo</th><th>Has</th></tr></thead><tbody></tbody></table></div>
             </div>
         </div>
 
@@ -642,6 +642,18 @@ function refreshUI(laborKey) {
     var labor = CYCLES_DB[laborKey];
     var title = document.getElementById('header-title');
     if (title && labor) title.textContent = labor.nombre + ' - Monterrey';
+
+    // Update tab names and content based on labor
+    var isPoli = laborKey === 'polinizacion';
+    var tabCos = document.getElementById('tab-btn-cosechado');
+    var tabZon = document.getElementById('tab-btn-zonas');
+    if (tabCos) tabCos.textContent = isPoli ? 'Polinizado' : 'Cosechado';
+    if (tabZon) tabZon.textContent = isPoli ? 'Rutas' : 'Zonas';
+    updateCosechadoHeaders(isPoli);
+    try { renderCosechado(); } catch(e) {}
+    try { renderTonZona(); } catch(e) {}
+    try { renderZonas(); } catch(e) {}
+    try { renderPresupuesto(); } catch(e) {}
 }
 
 function updateFilterButtons() {
@@ -1797,20 +1809,157 @@ function renderControlSiembra() {
         zonGrid.appendChild(card);
     });
 }
+function updateCosechadoHeaders(isPoli) {
+    var groupName = isPoli ? 'Ruta' : 'Zona';
+    var laborName = isPoli ? 'Polinizado' : 'Cosecha';
+    var el1 = document.getElementById('h-cosecha-dia'); if (el1) el1.textContent = laborName + ' del Dia';
+    var el2 = document.getElementById('h-ton-grupo'); if (el2) el2.textContent = (isPoli ? 'Lotes' : 'Toneladas') + ' por ' + groupName;
+    var el3 = document.getElementById('h-cumpl-grupo'); if (el3) el3.textContent = 'Cumplimiento por ' + groupName;
+    var el4 = document.getElementById('th-cos-group'); if (el4) el4.textContent = groupName;
+    var el5 = document.getElementById('th-tz-group'); if (el5) el5.textContent = groupName;
+    var el6 = document.getElementById('h-dist-has'); if (el6) el6.textContent = 'Distribucion de Hectareas por ' + groupName;
+    var el7 = document.getElementById('h-detalle-zona'); if (el7) el7.textContent = 'Detalle por ' + groupName;
+    var el8 = document.getElementById('th-zonas-group'); if (el8) el8.textContent = groupName;
+}
 function renderCosechado() {
+    var isPoli = ACTIVE_LABOR === 'polinizacion';
+    if (isPoli) {
+        renderCosechadoPoli();
+        return;
+    }
+    // Restore cosecha headers
+    var thead = document.querySelector('#table-cosechado thead tr');
+    if (thead) {
+        while (thead.firstChild) thead.removeChild(thead.firstChild);
+        ['Zona','Ton','Jornales','Ton/Jor','Cuad.'].forEach(function(h) {
+            var th = document.createElement('th'); th.textContent = h; thead.appendChild(th);
+        });
+    }
     var order = ['ZONA A','ZONA B','ZONA C','GUINENSIS'];
     var tbody = document.querySelector('#table-cosechado tbody'); tbody.textContent='';
     var sT=0,sJ=0,sC=0;
     order.forEach(function(z){var d=DATA.cosechado[z];if(!d)return;sT+=d.toneladas;sJ+=d.jornales;sC+=d.cuadrillas;var tr=document.createElement('tr');[z,d.toneladas,d.jornales,d.ton_jornal,d.cuadrillas].forEach(function(v,i){var td=document.createElement('td');if(i===0){var b=document.createElement('strong');b.textContent=v;td.appendChild(b);}else td.textContent=v;tr.appendChild(td);});tbody.appendChild(tr);});
     var ttr=document.createElement('tr');ttr.style.fontWeight='700';ttr.style.borderTop='2px solid var(--border)';['TOTAL',sT,sJ,sJ>0?(sT/sJ).toFixed(2):'0',sC].forEach(function(v){var td=document.createElement('td');td.textContent=v;ttr.appendChild(td);});tbody.appendChild(ttr);
-    new Chart(document.getElementById('chart-cosecha'),{type:'bar',data:{labels:order,datasets:[{label:'Ton',data:order.map(function(z){return DATA.cosechado[z]?DATA.cosechado[z].toneladas:0;}),backgroundColor:['#818cf8','#38bdf8','#34d399','#a78bfa'],borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#94a3b8'},grid:{display:false}},y:{ticks:{color:'#94a3b8'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
+    // Destroy old chart if exists
+    var canvas = document.getElementById('chart-cosecha');
+    if (canvas._chart) { canvas._chart.destroy(); }
+    canvas._chart = new Chart(canvas,{type:'bar',data:{labels:order,datasets:[{label:'Ton',data:order.map(function(z){return DATA.cosechado[z]?DATA.cosechado[z].toneladas:0;}),backgroundColor:['#818cf8','#38bdf8','#34d399','#a78bfa'],borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#94a3b8'},grid:{display:false}},y:{ticks:{color:'#94a3b8'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
+}
+function renderCosechadoPoli() {
+    // Group lots by ruta, count lotes and sum has per color
+    var rutas = {};
+    DATA.lots.forEach(function(l) {
+        if (l.dias_ciclo === null || l.dias_ciclo === undefined) return;
+        var ruta = l.ruta || 'SIN RUTA';
+        if (!rutas[ruta]) rutas[ruta] = { lotes: 0, has: 0, verde: 0, amarillo: 0, naranja: 0, rojo: 0 };
+        rutas[ruta].lotes++;
+        rutas[ruta].has += (l.has || 0);
+        var col = getColor(l.dias_ciclo);
+        if (rutas[ruta][col] !== undefined) rutas[ruta][col]++;
+    });
+    var order = Object.keys(rutas).sort();
+    var tbody = document.querySelector('#table-cosechado tbody'); tbody.textContent='';
+    var sL=0, sH=0;
+    order.forEach(function(r) {
+        var d = rutas[r]; sL += d.lotes; sH += d.has;
+        var tr = document.createElement('tr');
+        var td1 = document.createElement('td'); var b = document.createElement('strong'); b.textContent = r; td1.appendChild(b);
+        var td2 = document.createElement('td'); td2.textContent = d.lotes;
+        var td3 = document.createElement('td'); td3.textContent = d.has.toFixed(1);
+        var td4 = document.createElement('td'); td4.textContent = d.verde; td4.style.color = '#22c55e';
+        var td5 = document.createElement('td'); td5.textContent = d.rojo; td5.style.color = '#ef4444';
+        tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4); tr.appendChild(td5);
+        tbody.appendChild(tr);
+    });
+    var ttr = document.createElement('tr'); ttr.style.fontWeight='700'; ttr.style.borderTop='2px solid var(--border)';
+    ['TOTAL', sL, sH.toFixed(1), '', ''].forEach(function(v) { var td = document.createElement('td'); td.textContent = v; ttr.appendChild(td); });
+    tbody.appendChild(ttr);
+    // Update table headers for poli mode
+    var thead = document.querySelector('#table-cosechado thead tr');
+    if (thead) {
+        while (thead.firstChild) thead.removeChild(thead.firstChild);
+        ['Ruta','Lotes','Has','Verde','Rojo'].forEach(function(h) {
+            var th = document.createElement('th'); th.textContent = h; thead.appendChild(th);
+        });
+    }
+    // Chart by ruta
+    var canvas = document.getElementById('chart-cosecha');
+    if (canvas._chart) { canvas._chart.destroy(); }
+    var colors = ['#818cf8','#38bdf8','#34d399','#a78bfa','#f472b6','#fb923c','#facc15','#22d3ee','#c084fc'];
+    canvas._chart = new Chart(canvas,{type:'bar',data:{labels:order,datasets:[{label:'Lotes',data:order.map(function(r){return rutas[r].lotes;}),backgroundColor:colors.slice(0,order.length),borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#94a3b8',font:{size:9}},grid:{display:false}},y:{ticks:{color:'#94a3b8'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
 }
 function renderTonZona() {
+    var isPoli = ACTIVE_LABOR === 'polinizacion';
+    if (isPoli) {
+        renderTonZonaPoli();
+        return;
+    }
+    // Restore cosecha headers
+    var thead=document.querySelector('#table-tonzona thead tr');
+    if(thead){while(thead.firstChild)thead.removeChild(thead.firstChild);['Zona','Presupuesto','Cosechado','Cumpl.','Progreso'].forEach(function(h){var th=document.createElement('th');th.textContent=h;if(h==='Progreso')th.style.width='150px';thead.appendChild(th);});}
     var order=['ZONA A','ZONA B','ZONA C','HIBRIDO','ADULTA','TOTAL'];
     var tbody=document.querySelector('#table-tonzona tbody');tbody.textContent='';
     order.forEach(function(z){var d=DATA.ton_zona[z];if(!d)return;var p=Math.min(d.cumplimiento,100);var color=p>=70?'#22c55e':p>=50?'#eab308':'#ef4444';var t=z==='TOTAL';var tr=document.createElement('tr');if(t){tr.style.fontWeight='700';tr.style.borderTop='2px solid var(--border)';}
     var td1=document.createElement('td');td1.textContent=z;var td2=document.createElement('td');td2.textContent=d.presupuesto.toLocaleString();var td3=document.createElement('td');td3.textContent=d.total_cosechado.toLocaleString();var td4=document.createElement('td');td4.textContent=d.cumplimiento.toFixed(1)+'%';td4.style.color=color;var td5=document.createElement('td');td5.style.width='150px';var bar=document.createElement('div');bar.className='progress-bar';var fill=document.createElement('div');fill.className='progress-fill';fill.style.width=p+'%';fill.style.background=color;bar.appendChild(fill);td5.appendChild(bar);
     tr.appendChild(td1);tr.appendChild(td2);tr.appendChild(td3);tr.appendChild(td4);tr.appendChild(td5);tbody.appendChild(tr);});
+}
+function renderTonZonaPoli() {
+    // Show per-ruta summary: lotes evaluados, % en verde, % atrasados
+    var rutas = {};
+    var totalLotes = 0, totalVerde = 0, totalRojo = 0;
+    DATA.lots.forEach(function(l) {
+        if (l.dias_ciclo === null || l.dias_ciclo === undefined) return;
+        var ruta = l.ruta || 'SIN RUTA';
+        if (!rutas[ruta]) rutas[ruta] = { lotes: 0, verde: 0, rojo: 0, has: 0 };
+        rutas[ruta].lotes++; totalLotes++;
+        rutas[ruta].has += (l.has || 0);
+        var col = getColor(l.dias_ciclo);
+        if (col === 'verde') { rutas[ruta].verde++; totalVerde++; }
+        if (col === 'rojo') { rutas[ruta].rojo++; totalRojo++; }
+    });
+    var order = Object.keys(rutas).sort();
+    // Update headers
+    var thead = document.querySelector('#table-tonzona thead tr');
+    if (thead) {
+        while (thead.firstChild) thead.removeChild(thead.firstChild);
+        ['Ruta','Lotes','Has','% Verde','% Atrasado','Progreso'].forEach(function(h) {
+            var th = document.createElement('th'); th.textContent = h;
+            if (h === 'Progreso') th.style.width = '150px';
+            thead.appendChild(th);
+        });
+    }
+    var tbody = document.querySelector('#table-tonzona tbody'); tbody.textContent = '';
+    order.forEach(function(r) {
+        var d = rutas[r];
+        var pVerde = d.lotes > 0 ? (d.verde / d.lotes * 100) : 0;
+        var pRojo = d.lotes > 0 ? (d.rojo / d.lotes * 100) : 0;
+        var color = pVerde >= 70 ? '#22c55e' : pVerde >= 50 ? '#eab308' : '#ef4444';
+        var tr = document.createElement('tr');
+        var td1 = document.createElement('td'); td1.textContent = r;
+        var td2 = document.createElement('td'); td2.textContent = d.lotes;
+        var td3 = document.createElement('td'); td3.textContent = d.has.toFixed(1);
+        var td4 = document.createElement('td'); td4.textContent = pVerde.toFixed(0) + '%'; td4.style.color = '#22c55e';
+        var td5 = document.createElement('td'); td5.textContent = pRojo.toFixed(0) + '%'; td5.style.color = '#ef4444';
+        var td6 = document.createElement('td'); td6.style.width = '150px';
+        var bar = document.createElement('div'); bar.className = 'progress-bar';
+        var fill = document.createElement('div'); fill.className = 'progress-fill';
+        fill.style.width = Math.min(pVerde, 100) + '%'; fill.style.background = color;
+        bar.appendChild(fill); td6.appendChild(bar);
+        tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4); tr.appendChild(td5); tr.appendChild(td6);
+        tbody.appendChild(tr);
+    });
+    // Total row
+    var pTV = totalLotes > 0 ? (totalVerde / totalLotes * 100) : 0;
+    var pTR = totalLotes > 0 ? (totalRojo / totalLotes * 100) : 0;
+    var ttr = document.createElement('tr'); ttr.style.fontWeight = '700'; ttr.style.borderTop = '2px solid var(--border)';
+    var t1 = document.createElement('td'); t1.textContent = 'TOTAL';
+    var t2 = document.createElement('td'); t2.textContent = totalLotes;
+    var t3 = document.createElement('td'); t3.textContent = '';
+    var t4 = document.createElement('td'); t4.textContent = pTV.toFixed(0) + '%'; t4.style.color = '#22c55e';
+    var t5 = document.createElement('td'); t5.textContent = pTR.toFixed(0) + '%'; t5.style.color = '#ef4444';
+    var t6 = document.createElement('td');
+    ttr.appendChild(t1); ttr.appendChild(t2); ttr.appendChild(t3); ttr.appendChild(t4); ttr.appendChild(t5); ttr.appendChild(t6);
+    tbody.appendChild(ttr);
 }
 function renderPresupuesto() {
     var container=document.getElementById('presupuesto-tables');container.textContent='';
@@ -1820,7 +1969,7 @@ function renderPresupuesto() {
         var h2=document.createElement('h2');h2.textContent=sem.titulo;card.appendChild(h2);
         var table=document.createElement('table');table.className='pres-table';
         var thead=document.createElement('thead');var htr=document.createElement('tr');
-        var th0=document.createElement('th');th0.textContent='Zona';htr.appendChild(th0);
+        var th0=document.createElement('th');th0.textContent=(ACTIVE_LABOR==='polinizacion'?'Ruta':'Zona');htr.appendChild(th0);
         dias.forEach(function(d){var th=document.createElement('th');th.className='num';th.textContent=d;htr.appendChild(th);});
         var thT=document.createElement('th');thT.className='num';thT.textContent='Total';thT.style.color='#818cf8';htr.appendChild(thT);
         thead.appendChild(htr);table.appendChild(thead);
@@ -1832,11 +1981,64 @@ function renderPresupuesto() {
     });
 }
 function renderZonas() {
+    var isPoli = ACTIVE_LABOR === 'polinizacion';
+    if (isPoli) {
+        renderZonasPoli();
+        return;
+    }
     var zones=Object.keys(DATA.zonas_has);var colors=['#818cf8','#38bdf8','#34d399','#a78bfa'];
-    new Chart(document.getElementById('chart-zonas-has'),{type:'pie',data:{labels:zones.map(function(z){return z+' ('+DATA.zonas_has[z].total_has+' ha)';}),datasets:[{data:zones.map(function(z){return DATA.zonas_has[z].total_has;}),backgroundColor:colors,borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',padding:15}}}}});
+    var canvas = document.getElementById('chart-zonas-has');
+    if (canvas._chart) { canvas._chart.destroy(); }
+    canvas._chart = new Chart(canvas,{type:'pie',data:{labels:zones.map(function(z){return z+' ('+DATA.zonas_has[z].total_has+' ha)';}),datasets:[{data:zones.map(function(z){return DATA.zonas_has[z].total_has;}),backgroundColor:colors,borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',padding:15}}}}});
     var tbody=document.querySelector('#table-zonas tbody');tbody.textContent='';
     Object.entries(DATA.zonas_has).forEach(function(entry){var zona=entry[0],info=entry[1];info.tipos.forEach(function(t,i){var tr=document.createElement('tr');if(i===0){var td0=document.createElement('td');td0.setAttribute('rowspan',info.tipos.length);td0.style.fontWeight='700';td0.style.verticalAlign='top';td0.textContent=zona+' ('+info.total_has+' ha)';tr.appendChild(td0);}
     var td1=document.createElement('td');td1.textContent=t.tipo;var td2=document.createElement('td');td2.textContent=t.has.toLocaleString();tr.appendChild(td1);tr.appendChild(td2);tbody.appendChild(tr);});});
+}
+function renderZonasPoli() {
+    // Group by ruta: total has, lotes count
+    var rutas = {};
+    DATA.lots.forEach(function(l) {
+        var ruta = l.ruta || 'SIN RUTA';
+        if (!rutas[ruta]) rutas[ruta] = { total_has: 0, lotes: 0, auxiliares: {} };
+        rutas[ruta].total_has += (l.has || 0);
+        rutas[ruta].lotes++;
+        var aux = l.auxiliar || 'SIN ASIGNAR';
+        if (!rutas[ruta].auxiliares[aux]) rutas[ruta].auxiliares[aux] = 0;
+        rutas[ruta].auxiliares[aux] += (l.has || 0);
+    });
+    var order = Object.keys(rutas).sort();
+    var colors = ['#818cf8','#38bdf8','#34d399','#a78bfa','#f472b6','#fb923c','#facc15','#22d3ee','#c084fc'];
+    var canvas = document.getElementById('chart-zonas-has');
+    if (canvas._chart) { canvas._chart.destroy(); }
+    canvas._chart = new Chart(canvas,{type:'pie',data:{labels:order.map(function(r){return r+' ('+rutas[r].total_has.toFixed(0)+' ha)';}),datasets:[{data:order.map(function(r){return rutas[r].total_has;}),backgroundColor:colors.slice(0,order.length),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',padding:12,font:{size:10}}}}}});
+    // Table: ruta > auxiliares
+    var tbody = document.querySelector('#table-zonas tbody'); tbody.textContent = '';
+    // Update headers
+    var thead = document.querySelector('#table-zonas thead tr');
+    if (thead) {
+        while (thead.firstChild) thead.removeChild(thead.firstChild);
+        ['Ruta','Auxiliar','Has'].forEach(function(h) {
+            var th = document.createElement('th'); th.textContent = h; thead.appendChild(th);
+        });
+    }
+    order.forEach(function(r) {
+        var info = rutas[r];
+        var auxEntries = Object.entries(info.auxiliares).sort(function(a,b){ return b[1]-a[1]; });
+        auxEntries.forEach(function(entry, i) {
+            var tr = document.createElement('tr');
+            if (i === 0) {
+                var td0 = document.createElement('td');
+                td0.setAttribute('rowspan', auxEntries.length);
+                td0.style.fontWeight = '700'; td0.style.verticalAlign = 'top';
+                td0.textContent = r + ' (' + info.total_has.toFixed(0) + ' ha)';
+                tr.appendChild(td0);
+            }
+            var td1 = document.createElement('td'); td1.textContent = entry[0];
+            var td2 = document.createElement('td'); td2.textContent = entry[1].toFixed(1);
+            tr.appendChild(td1); tr.appendChild(td2);
+            tbody.appendChild(tr);
+        });
+    });
 }
 
 // ===== EVENT HANDLERS =====
