@@ -1,5 +1,6 @@
 // ===== MAPA CICLOS - GOOGLE APPS SCRIPT API =====
 // Hojas: POLINIZACION, COSECHA, CIERRES
+// CIERRES columns: LOTE | TIPO | FECHA | SUPERVISOR | LABOR | REGISTRADO
 
 function doGet(e) {
   var action = e.parameter.action || 'all';
@@ -17,16 +18,30 @@ function doGet(e) {
       cosecha: getLaborData('COSECHA'),
       cierres: getCierres()
     };
+  } else if (action === 'registro') {
+    var lote = e.parameter.lote || '';
+    var tipo = e.parameter.tipo || 'CIERRE';
+    var fecha = e.parameter.fecha || '';
+    var labor = e.parameter.labor || 'POLINIZACION';
+    var supervisor = e.parameter.supervisor || 'SUPERVISOR';
+    result = addRegistro(lote, tipo, fecha, supervisor, labor);
   } else if (action === 'cierre') {
+    // Backward compatible
     var lote = e.parameter.lote || '';
     var fecha = e.parameter.fecha || '';
     var labor = e.parameter.labor || 'POLINIZACION';
     var supervisor = e.parameter.supervisor || 'SUPERVISOR';
-    result = addCierre(lote, fecha, supervisor, labor);
+    result = addRegistro(lote, 'CIERRE', fecha, supervisor, labor);
+  } else if (action === 'delete_registro') {
+    var lote = e.parameter.lote || '';
+    var tipo = e.parameter.tipo || '';
+    var fecha = e.parameter.fecha || '';
+    result = deleteRegistro(lote, tipo, fecha);
   } else if (action === 'delete_cierre') {
+    // Backward compatible
     var lote = e.parameter.lote || '';
     var fecha = e.parameter.fecha || '';
-    result = deleteCierre(lote, fecha);
+    result = deleteRegistro(lote, 'CIERRE', fecha);
   }
 
   return ContentService
@@ -39,10 +54,14 @@ function doPost(e) {
   var action = data.action || '';
   var result = {};
 
-  if (action === 'cierre') {
-    result = addCierre(data.lote, data.fecha, data.supervisor || 'SUPERVISOR', data.labor || 'POLINIZACION');
+  if (action === 'registro') {
+    result = addRegistro(data.lote, data.tipo || 'CIERRE', data.fecha, data.supervisor || 'SUPERVISOR', data.labor || 'POLINIZACION');
+  } else if (action === 'cierre') {
+    result = addRegistro(data.lote, 'CIERRE', data.fecha, data.supervisor || 'SUPERVISOR', data.labor || 'POLINIZACION');
+  } else if (action === 'delete_registro') {
+    result = deleteRegistro(data.lote, data.tipo || '', data.fecha);
   } else if (action === 'delete_cierre') {
-    result = deleteCierre(data.lote, data.fecha);
+    result = deleteRegistro(data.lote, 'CIERRE', data.fecha);
   }
 
   return ContentService
@@ -91,25 +110,57 @@ function getCierres() {
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
     if (!row[0]) continue;
+
+    // New format: LOTE | TIPO | FECHA | SUPERVISOR | LABOR | REGISTRADO
+    var tipo = row[1] ? row[1].toString() : '';
+    var isNewFormat = (tipo === 'INGRESO' || tipo === 'CIERRE');
+
     var fecha = '';
-    try {
-      fecha = Utilities.formatDate(new Date(row[1]), 'America/Bogota', 'yyyy-MM-dd');
-    } catch(e) {
-      fecha = row[1].toString();
-    }
+    var supervisor = '';
+    var labor = '';
     var registrado = '';
-    if (row[4]) {
+
+    if (isNewFormat) {
+      // New format
       try {
-        registrado = Utilities.formatDate(new Date(row[4]), 'America/Bogota', 'yyyy-MM-dd\'T\'HH:mm:ss');
-      } catch(e2) {
-        registrado = row[4].toString();
+        fecha = Utilities.formatDate(new Date(row[2]), 'America/Bogota', 'yyyy-MM-dd');
+      } catch(e) {
+        fecha = row[2] ? row[2].toString() : '';
+      }
+      supervisor = row[3] ? row[3].toString() : '';
+      labor = row[4] ? row[4].toString() : '';
+      if (row[5]) {
+        try {
+          registrado = Utilities.formatDate(new Date(row[5]), 'America/Bogota', 'yyyy-MM-dd\'T\'HH:mm:ss');
+        } catch(e2) {
+          registrado = row[5].toString();
+        }
+      }
+    } else {
+      // Old format: LOTE | FECHA | SUPERVISOR | LABOR | REGISTRADO
+      tipo = 'CIERRE';
+      try {
+        fecha = Utilities.formatDate(new Date(row[1]), 'America/Bogota', 'yyyy-MM-dd');
+      } catch(e) {
+        fecha = row[1] ? row[1].toString() : '';
+      }
+      supervisor = row[2] ? row[2].toString() : '';
+      labor = row[3] ? row[3].toString() : '';
+      if (row[4]) {
+        try {
+          registrado = Utilities.formatDate(new Date(row[4]), 'America/Bogota', 'yyyy-MM-dd\'T\'HH:mm:ss');
+        } catch(e2) {
+          registrado = row[4].toString();
+        }
       }
     }
+
     cierres.push({
       lote: row[0].toString(),
+      tipo: tipo,
       fecha: fecha,
-      supervisor: row[2] ? row[2].toString() : '',
-      labor: row[3] ? row[3].toString() : '',
+      supervisor: supervisor,
+      labor: labor,
       registrado: registrado
     });
   }
@@ -117,55 +168,68 @@ function getCierres() {
   return { cierres: cierres };
 }
 
-function addCierre(lote, fecha, supervisor, labor) {
+function addRegistro(lote, tipo, fecha, supervisor, labor) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('CIERRES');
   var registrado = Utilities.formatDate(new Date(), 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
   var newRow = sheet.getLastRow() + 1;
+  // New format: LOTE | TIPO | FECHA | SUPERVISOR | LABOR | REGISTRADO
   sheet.getRange(newRow, 1).setNumberFormat('@').setValue(lote);
-  sheet.getRange(newRow, 2).setValue(fecha);
-  sheet.getRange(newRow, 3).setValue(supervisor);
-  sheet.getRange(newRow, 4).setValue(labor);
-  sheet.getRange(newRow, 5).setValue(registrado);
+  sheet.getRange(newRow, 2).setValue(tipo);
+  sheet.getRange(newRow, 3).setValue(fecha);
+  sheet.getRange(newRow, 4).setValue(supervisor);
+  sheet.getRange(newRow, 5).setValue(labor);
+  sheet.getRange(newRow, 6).setValue(registrado);
 
-  // Update labor sheet - recalculate dias_ciclo
+  // Update labor sheet - recalculate dias_ciclo based on tipo
   var laborSheet = ss.getSheetByName(labor);
   if (laborSheet) {
     var data = laborSheet.getDataRange().getValues();
     var today = new Date();
     today.setHours(0, 0, 0, 0);
-    var cierreDate = new Date(fecha + 'T00:00:00');
-    var diffDays = Math.round((today - cierreDate) / 86400000 * 10) / 10;
+    var regDate = new Date(fecha + 'T00:00:00');
+    var diffDays = Math.round((today - regDate) / 86400000 * 10) / 10;
 
     for (var i = 1; i < data.length; i++) {
       if (data[i][0].toString() === lote) {
+        // dias_ciclo = today - fecha_ingreso (for INGRESO)
+        // dias_ciclo = today - fecha_cierre (for CIERRE, days since last close)
         laborSheet.getRange(i + 1, 3).setValue(diffDays);
         break;
       }
     }
   }
 
-  return { success: true, lote: lote, fecha: fecha };
+  return { success: true, lote: lote, tipo: tipo, fecha: fecha };
 }
 
-function deleteCierre(lote, fecha) {
+function deleteRegistro(lote, tipo, fecha) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('CIERRES');
   var data = sheet.getDataRange().getValues();
 
   for (var i = data.length - 1; i >= 1; i--) {
     var rowLote = data[i][0] ? data[i][0].toString() : '';
+    var rowTipo = data[i][1] ? data[i][1].toString() : '';
     var rowFecha = '';
+
+    // Detect format
+    var isNewFmt = (rowTipo === 'INGRESO' || rowTipo === 'CIERRE');
+    var fechaCol = isNewFmt ? 2 : 1;
+
     try {
-      rowFecha = Utilities.formatDate(new Date(data[i][1]), 'America/Bogota', 'yyyy-MM-dd');
+      rowFecha = Utilities.formatDate(new Date(data[i][fechaCol]), 'America/Bogota', 'yyyy-MM-dd');
     } catch(e) {
-      rowFecha = data[i][1] ? data[i][1].toString() : '';
+      rowFecha = data[i][fechaCol] ? data[i][fechaCol].toString() : '';
     }
-    if (rowLote === lote && rowFecha === fecha) {
+
+    if (!isNewFmt) rowTipo = 'CIERRE';
+
+    if (rowLote === lote && rowFecha === fecha && (tipo === '' || rowTipo === tipo)) {
       sheet.deleteRow(i + 1);
-      return { success: true, deleted: lote + ' ' + fecha };
+      return { success: true, deleted: lote + ' ' + rowTipo + ' ' + fecha };
     }
   }
 
-  return { success: false, error: 'Cierre no encontrado' };
+  return { success: false, error: 'Registro no encontrado' };
 }

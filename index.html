@@ -351,7 +351,7 @@
         <div class="tab-content" id="tab-cierres">
             <div class="cierre-layout">
                 <div class="card">
-                    <h2>Registrar Cierre de Lote</h2>
+                    <h2>Registrar Ingreso / Cierre</h2>
                     <div class="cierre-form">
                         <div>
                             <label>Lote</label>
@@ -361,20 +361,27 @@
                             </div>
                         </div>
                         <div>
-                            <label>Fecha de cierre</label>
+                            <label>Tipo de registro</label>
+                            <select id="cierre-tipo" style="padding:0.5rem;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);width:100%">
+                                <option value="INGRESO">Ingreso (inicio polinizacion)</option>
+                                <option value="CIERRE">Cierre (fin polinizacion)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Fecha</label>
                             <input type="date" id="cierre-fecha">
                         </div>
                         <div style="padding-top:0.5rem">
-                            <button class="btn-primary" id="btn-cierre">Registrar Cierre</button>
+                            <button class="btn-primary" id="btn-cierre">Registrar Ingreso</button>
                         </div>
                         <div id="cierre-msg" style="font-size:0.8rem; min-height:1.5rem;"></div>
                     </div>
                 </div>
                 <div class="card">
-                    <h2>Historial de Cierres</h2>
+                    <h2>Historial de Registros</h2>
                     <div class="cierre-historial">
                         <table id="table-cierres">
-                            <thead><tr><th>Lote</th><th>Zona</th><th>Fecha Cierre</th><th>Dias Ciclo</th><th>Fecha Registro</th><th>Días Abierto</th><th></th></tr></thead>
+                            <thead><tr><th>Lote</th><th>Tipo</th><th>Fecha</th><th>Dias Ciclo</th><th>Dias Abierto</th><th>Registrado</th><th></th></tr></thead>
                             <tbody></tbody>
                         </table>
                     </div>
@@ -559,28 +566,51 @@ function applyAPIData(laborKey, apiData) {
         });
 }
 
-function postCierreToAPI(lote, fecha, labor) {
-    var url = API_URL + '?action=cierre&lote=' + encodeURIComponent(lote) + '&fecha=' + encodeURIComponent(fecha) + '&labor=' + encodeURIComponent(labor || 'POLINIZACION');
+function postRegistroToAPI(lote, tipo, fecha, labor) {
+    var url = API_URL + '?action=registro&lote=' + encodeURIComponent(lote) + '&tipo=' + encodeURIComponent(tipo) + '&fecha=' + encodeURIComponent(fecha) + '&labor=' + encodeURIComponent(labor || 'POLINIZACION');
     fetch(url)
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        console.log('Cierre guardado en API:', data);
+        console.log('Registro guardado en API:', data);
     })
     .catch(function(e) {
-        console.warn('No se pudo guardar cierre en API:', e.message);
+        console.warn('No se pudo guardar registro en API:', e.message);
+    });
+}
+
+// Backward compatible wrapper
+function postCierreToAPI(lote, fecha, labor) {
+    postRegistroToAPI(lote, 'CIERRE', fecha, labor);
+}
+
+function deleteRegistroFromAPI(lote, tipo, fecha) {
+    var url = API_URL + '?action=delete_registro&lote=' + encodeURIComponent(lote) + '&tipo=' + encodeURIComponent(tipo) + '&fecha=' + encodeURIComponent(fecha);
+    fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        console.log('Registro eliminado de API:', data);
+    })
+    .catch(function(e) {
+        console.warn('No se pudo eliminar registro de API:', e.message);
     });
 }
 
 function deleteCierreFromAPI(lote, fecha) {
-    var url = API_URL + '?action=delete_cierre&lote=' + encodeURIComponent(lote) + '&fecha=' + encodeURIComponent(fecha);
-    fetch(url)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        console.log('Cierre eliminado de API:', data);
-    })
-    .catch(function(e) {
-        console.warn('No se pudo eliminar cierre de API:', e.message);
-    });
+    deleteRegistroFromAPI(lote, 'CIERRE', fecha);
+}
+
+// Helper: get lot state from CIERRES
+function getLotState(lote) {
+    var registros = CIERRES.filter(function(c) { return c.lote === lote; });
+    registros.sort(function(a, b) { return b.fecha.localeCompare(a.fecha) || b.tipo.localeCompare(a.tipo); });
+    var lastIngreso = null;
+    var lastCierre = null;
+    for (var i = 0; i < registros.length; i++) {
+        if (!lastIngreso && registros[i].tipo === 'INGRESO') lastIngreso = registros[i];
+        if (!lastCierre && registros[i].tipo === 'CIERRE') lastCierre = registros[i];
+    }
+    var ingresoAbierto = lastIngreso && (!lastCierre || lastIngreso.fecha > lastCierre.fecha);
+    return { lastIngreso: lastIngreso, lastCierre: lastCierre, ingresoAbierto: ingresoAbierto };
 }
 
 function applyLaborData(laborKey) {
@@ -778,14 +808,34 @@ function getFillColor(dias) {
 
 // ===== CIERRES LOGIC =====
 function applyCierres() {
+    // Migrate old format (no tipo)
+    CIERRES.forEach(function(c) { if (!c.tipo) c.tipo = 'CIERRE'; });
+
     var today = new Date();
     today.setHours(0,0,0,0);
+
+    // Group by lote
+    var byLote = {};
     CIERRES.forEach(function(c) {
-        var lot = DATA.lotsByName[c.lote];
-        if (lot) {
-            var cierreDate = new Date(c.fecha + 'T00:00:00');
-            var diffMs = today - cierreDate;
-            var diffDays = Math.round(diffMs / 86400000 * 10) / 10;
+        if (!byLote[c.lote]) byLote[c.lote] = [];
+        byLote[c.lote].push(c);
+    });
+
+    Object.keys(byLote).forEach(function(lote) {
+        var lot = DATA.lotsByName[lote];
+        if (!lot) return;
+
+        var state = getLotState(lote);
+
+        if (state.ingresoAbierto) {
+            // Lote abierto: dias_ciclo = hoy - fecha_ingreso
+            var ingresoDate = new Date(state.lastIngreso.fecha + 'T00:00:00');
+            var diffDays = Math.round((today - ingresoDate) / 86400000 * 10) / 10;
+            lot.dias_ciclo = diffDays;
+        } else if (state.lastCierre) {
+            // Lote cerrado: dias_ciclo = hoy - fecha_cierre
+            var cierreDate = new Date(state.lastCierre.fecha + 'T00:00:00');
+            var diffDays = Math.round((today - cierreDate) / 86400000 * 10) / 10;
             lot.dias_ciclo = diffDays;
         }
     });
@@ -1345,45 +1395,81 @@ function buildTooltipBody(dias, lot) {
         if (r[0]==='Estado') s2.style.color = getColorHex(dias);
         row.appendChild(s1); row.appendChild(s2); body.appendChild(row);
     });
-    // Quick action buttons (only for lots with data - not gray/sin evaluar)
-    if (dias === null || dias === undefined) return;
+    // Quick action buttons
+    var state = getLotState(lot.lote);
     var btnRow = document.createElement('div');
-    btnRow.style.cssText = 'margin-top:8px;text-align:center;display:flex;gap:6px;justify-content:center';
-    var btn = document.createElement('button');
-    btn.textContent = 'Cerrar Lote Hoy';
-    btn.style.cssText = 'background:#22c55e;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:12px;font-weight:bold';
-    btn.addEventListener('click', function(ev) {
-        ev.stopPropagation();
-        var lote = lot.lote;
-        if (!lote || !DATA.lotsByName[lote]) return;
-        var fecha = new Date().toISOString().split('T')[0];
-        CIERRES = CIERRES.filter(function(c){ return c.lote !== lote; });
-        CIERRES.push({ lote: lote, fecha: fecha, registrado: new Date().toISOString() });
-        saveCierres();
-        applyCierres();
-        updateMapColors();
-        updateKPIs();
-        renderCierresHistorial();
-        hideTooltip();
-        postCierreToAPI(lote, fecha, ACTIVE_LABOR.toUpperCase());
-        var notif = document.createElement('div');
-        notif.style.cssText = 'position:fixed;top:10px;right:10px;background:#22c55e;color:#fff;padding:10px 20px;border-radius:8px;z-index:9999;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
-        notif.textContent = lote + ' cerrado (' + fecha + ')';
-        document.body.appendChild(notif);
-        setTimeout(function(){ notif.remove(); }, 3000);
-    });
-    btnRow.appendChild(btn);
-    // Undo close button - only if lot has a cierre
-    var hasCierre = CIERRES.some(function(c){ return c.lote === lot.lote; });
-    if (hasCierre) {
+    btnRow.style.cssText = 'margin-top:8px;text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center';
+
+    // Show state info
+    if (state.ingresoAbierto) {
+        var stInfo = document.createElement('div');
+        stInfo.style.cssText = 'font-size:11px;color:#38bdf8;background:rgba(56,189,248,0.1);padding:3px 8px;border-radius:4px;width:100%;text-align:center';
+        var inDays = Math.round((new Date() - new Date(state.lastIngreso.fecha + 'T00:00:00')) / 86400000);
+        stInfo.textContent = 'En proceso: ' + inDays + ' dias (desde ' + state.lastIngreso.fecha + ')';
+        btnRow.appendChild(stInfo);
+    }
+
+    var btnContainer = document.createElement('div');
+    btnContainer.style.cssText = 'display:flex;gap:6px;justify-content:center';
+
+    if (state.ingresoAbierto) {
+        // Lote abierto: mostrar "Registrar Cierre"
+        var btnCierre = document.createElement('button');
+        btnCierre.textContent = 'Registrar Cierre';
+        btnCierre.style.cssText = 'background:#f97316;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:12px;font-weight:bold';
+        btnCierre.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+            var lote = lot.lote;
+            var fecha = new Date().toISOString().split('T')[0];
+            CIERRES.push({ lote: lote, tipo: 'CIERRE', fecha: fecha, registrado: new Date().toISOString() });
+            saveCierres();
+            applyCierres();
+            updateMapColors();
+            updateKPIs();
+            renderCierresHistorial();
+            hideTooltip();
+            postRegistroToAPI(lote, 'CIERRE', fecha, ACTIVE_LABOR.toUpperCase());
+            showNotif(lote + ' cierre registrado (' + fecha + ')', '#f97316');
+        });
+        btnContainer.appendChild(btnCierre);
+    } else {
+        // Lote sin ingreso o ya cerrado: mostrar "Registrar Ingreso"
+        var btnIngreso = document.createElement('button');
+        btnIngreso.textContent = 'Registrar Ingreso';
+        btnIngreso.style.cssText = 'background:#22c55e;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:12px;font-weight:bold';
+        btnIngreso.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+            var lote = lot.lote;
+            var fecha = new Date().toISOString().split('T')[0];
+            CIERRES.push({ lote: lote, tipo: 'INGRESO', fecha: fecha, registrado: new Date().toISOString() });
+            saveCierres();
+            applyCierres();
+            updateMapColors();
+            updateKPIs();
+            renderCierresHistorial();
+            hideTooltip();
+            postRegistroToAPI(lote, 'INGRESO', fecha, ACTIVE_LABOR.toUpperCase());
+            showNotif(lote + ' ingreso registrado (' + fecha + ')', '#22c55e');
+        });
+        btnContainer.appendChild(btnIngreso);
+    }
+
+    // Deshacer ultimo registro
+    var hasRegistro = CIERRES.some(function(c){ return c.lote === lot.lote; });
+    if (hasRegistro) {
         var btnUndo = document.createElement('button');
-        btnUndo.textContent = 'Deshacer Cierre';
+        btnUndo.textContent = 'Deshacer Ultimo';
         btnUndo.style.cssText = 'background:#ef4444;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:12px;font-weight:bold';
         btnUndo.addEventListener('click', function(ev) {
             ev.stopPropagation();
             var lote = lot.lote;
-            var cierreToDelete = CIERRES.find(function(c){ return c.lote === lote; });
-            CIERRES = CIERRES.filter(function(c){ return c.lote !== lote; });
+            // Find last registro for this lot
+            var lotRegs = CIERRES.filter(function(c){ return c.lote === lote; });
+            lotRegs.sort(function(a,b){ return b.fecha.localeCompare(a.fecha) || b.registrado.localeCompare(a.registrado); });
+            var last = lotRegs[0];
+            if (last) {
+                CIERRES = CIERRES.filter(function(c){ return !(c.lote === lote && c.tipo === last.tipo && c.fecha === last.fecha); });
+            }
             if (ORIG_DIAS[lote] !== undefined) DATA.lotsByName[lote].dias_ciclo = ORIG_DIAS[lote];
             saveCierres();
             applyCierres();
@@ -1391,15 +1477,13 @@ function buildTooltipBody(dias, lot) {
             updateKPIs();
             renderCierresHistorial();
             hideTooltip();
-            if (cierreToDelete) deleteCierreFromAPI(lote, cierreToDelete.fecha);
-            var notif = document.createElement('div');
-            notif.style.cssText = 'position:fixed;top:10px;right:10px;background:#ef4444;color:#fff;padding:10px 20px;border-radius:8px;z-index:9999;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
-            notif.textContent = lote + ' cierre deshecho';
-            document.body.appendChild(notif);
-            setTimeout(function(){ notif.remove(); }, 3000);
+            if (last) deleteRegistroFromAPI(lote, last.tipo, last.fecha);
+            showNotif(lote + ' registro deshecho', '#ef4444');
         });
-        btnRow.appendChild(btnUndo);
+        btnContainer.appendChild(btnUndo);
     }
+
+    btnRow.appendChild(btnContainer);
     body.appendChild(btnRow);
 }
 
@@ -1432,6 +1516,14 @@ function moveTooltip(e) {
 
 function hideTooltip() { tooltip.classList.remove('show'); window._tooltipLocked = false; tooltip.style.pointerEvents = 'none'; }
 
+function showNotif(msg, color) {
+    var notif = document.createElement('div');
+    notif.style.cssText = 'position:fixed;top:10px;right:10px;background:' + color + ';color:#fff;padding:10px 20px;border-radius:8px;z-index:9999;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
+    notif.textContent = msg;
+    document.body.appendChild(notif);
+    setTimeout(function(){ notif.remove(); }, 3000);
+}
+
 // Click outside tooltip to dismiss
 document.addEventListener('click', function(e) {
     if (window._tooltipLocked && !tooltip.contains(e.target) && !e.target.classList.contains('lot-path')) {
@@ -1443,6 +1535,13 @@ document.addEventListener('click', function(e) {
 function initCierreForm() {
     var input = document.getElementById('cierre-lote');
     var dropdown = document.getElementById('cierre-dropdown');
+    var tipoSelect = document.getElementById('cierre-tipo');
+    var btnCierre = document.getElementById('btn-cierre');
+
+    // Update button text based on tipo selection
+    tipoSelect.addEventListener('change', function() {
+        btnCierre.textContent = this.value === 'INGRESO' ? 'Registrar Ingreso' : 'Registrar Cierre';
+    });
 
     input.addEventListener('input', function() {
         var q = this.value.toUpperCase().trim();
@@ -1460,12 +1559,18 @@ function initCierreForm() {
             nameSpan.textContent = lot.lote;
             var infoSpan = document.createElement('span');
             infoSpan.className = 'opt-zona';
-            infoSpan.textContent = (lot.zona || '--') + ' | ' + (lot.dias_ciclo !== null ? lot.dias_ciclo + 'd' : '--');
+            var st = getLotState(lot.lote);
+            var stText = st.ingresoAbierto ? 'EN PROCESO' : (lot.dias_ciclo !== null ? lot.dias_ciclo + 'd' : '--');
+            infoSpan.textContent = (lot.zona || '--') + ' | ' + stText;
             opt.appendChild(nameSpan);
             opt.appendChild(infoSpan);
             opt.addEventListener('click', function() {
                 input.value = lot.lote;
                 dropdown.classList.remove('open');
+                // Auto-select tipo based on lot state
+                var lotSt = getLotState(lot.lote);
+                tipoSelect.value = lotSt.ingresoAbierto ? 'CIERRE' : 'INGRESO';
+                btnCierre.textContent = lotSt.ingresoAbierto ? 'Registrar Cierre' : 'Registrar Ingreso';
             });
             dropdown.appendChild(opt);
         });
@@ -1476,9 +1581,10 @@ function initCierreForm() {
         setTimeout(function(){ dropdown.classList.remove('open'); }, 200);
     });
 
-    document.getElementById('btn-cierre').addEventListener('click', function() {
+    btnCierre.addEventListener('click', function() {
         var lote = input.value.trim().toUpperCase();
         var fecha = document.getElementById('cierre-fecha').value;
+        var tipo = tipoSelect.value;
         var msg = document.getElementById('cierre-msg');
 
         if (!lote || !DATA.lotsByName[lote]) {
@@ -1487,21 +1593,31 @@ function initCierreForm() {
             return;
         }
         if (!fecha) {
-            msg.textContent = 'Seleccione una fecha de cierre.';
+            msg.textContent = 'Seleccione una fecha.';
             msg.style.color = 'var(--rojo)';
             return;
         }
 
-        CIERRES = CIERRES.filter(function(c){ return c.lote !== lote; });
-        CIERRES.push({ lote: lote, fecha: fecha, registrado: new Date().toISOString() });
+        // Validate: can't close if no open ingreso
+        if (tipo === 'CIERRE') {
+            var st = getLotState(lote);
+            if (!st.ingresoAbierto) {
+                msg.textContent = 'Este lote no tiene un ingreso abierto. Registre primero un ingreso.';
+                msg.style.color = 'var(--rojo)';
+                return;
+            }
+        }
+
+        CIERRES.push({ lote: lote, tipo: tipo, fecha: fecha, registrado: new Date().toISOString() });
         saveCierres();
         applyCierres();
         updateMapColors();
         updateKPIs();
         renderCierresHistorial();
-        postCierreToAPI(lote, fecha, ACTIVE_LABOR.toUpperCase());
+        postRegistroToAPI(lote, tipo, fecha, ACTIVE_LABOR.toUpperCase());
 
-        msg.textContent = 'Cierre registrado para ' + lote + '. Dias de ciclo actualizado.';
+        var tipoText = tipo === 'INGRESO' ? 'Ingreso' : 'Cierre';
+        msg.textContent = tipoText + ' registrado para ' + lote + '.';
         msg.style.color = 'var(--verde)';
         input.value = '';
     });
@@ -1510,13 +1626,17 @@ function initCierreForm() {
 function renderCierresHistorial() {
     var tbody = document.querySelector('#table-cierres tbody');
     while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
-    var sorted = CIERRES.slice().sort(function(a,b){ return b.fecha.localeCompare(a.fecha); });
+    var sorted = CIERRES.slice().sort(function(a,b){
+        var fd = b.fecha.localeCompare(a.fecha);
+        if (fd !== 0) return fd;
+        return (b.registrado || '').localeCompare(a.registrado || '');
+    });
 
     if (sorted.length === 0) {
         var tr = document.createElement('tr');
         var td = document.createElement('td');
         td.setAttribute('colspan', '7');
-        td.textContent = 'No hay cierres registrados';
+        td.textContent = 'No hay registros';
         td.style.textAlign = 'center';
         td.style.color = 'var(--text-muted)';
         tr.appendChild(td);
@@ -1529,49 +1649,91 @@ function renderCierresHistorial() {
 
     sorted.forEach(function(c) {
         var lot = DATA.lotsByName[c.lote];
+        var tipo = c.tipo || 'CIERRE';
         var tr = document.createElement('tr');
+
+        // Lote
         var td1 = document.createElement('td'); td1.textContent = c.lote; td1.style.fontWeight = '700';
-        var td2 = document.createElement('td'); td2.textContent = lot ? lot.zona : '--';
+
+        // Tipo (badge)
+        var td2 = document.createElement('td');
+        var badge = document.createElement('span');
+        badge.textContent = tipo;
+        badge.style.cssText = 'padding:2px 8px;border-radius:4px;font-size:0.72rem;font-weight:700;';
+        if (tipo === 'INGRESO') {
+            badge.style.background = 'rgba(34,197,94,0.2)'; badge.style.color = '#22c55e';
+        } else {
+            badge.style.background = 'rgba(249,115,22,0.2)'; badge.style.color = '#f97316';
+        }
+        td2.appendChild(badge);
+
+        // Fecha
         var td3 = document.createElement('td'); td3.textContent = c.fecha;
+
+        // Dias Ciclo
         var td4 = document.createElement('td');
         var dias = lot ? lot.dias_ciclo : null;
         td4.textContent = dias !== null ? dias + 'd' : '--';
         td4.style.color = getColorHex(dias);
-        // Fecha de registro
+
+        // Dias Abierto (for CIERRE: find matching INGRESO; for INGRESO: days since ingreso)
         var td5 = document.createElement('td');
+        if (tipo === 'CIERRE') {
+            // Find matching INGRESO (most recent before this cierre)
+            var matchIngreso = CIERRES.filter(function(ci) {
+                return ci.lote === c.lote && ci.tipo === 'INGRESO' && ci.fecha <= c.fecha;
+            }).sort(function(a,b){ return b.fecha.localeCompare(a.fecha); })[0];
+            if (matchIngreso) {
+                var d1 = new Date(matchIngreso.fecha + 'T00:00:00');
+                var d2 = new Date(c.fecha + 'T00:00:00');
+                var dAbierto = Math.round((d2 - d1) / 86400000);
+                td5.textContent = dAbierto + 'd';
+                td5.style.color = '#38bdf8';
+            } else {
+                td5.textContent = '--';
+            }
+        } else {
+            // INGRESO: check if still open
+            var state = getLotState(c.lote);
+            if (state.ingresoAbierto && state.lastIngreso.fecha === c.fecha) {
+                var inDate = new Date(c.fecha + 'T00:00:00');
+                var dOpen = Math.round((today - inDate) / 86400000);
+                td5.textContent = dOpen + 'd (abierto)';
+                td5.style.color = '#22c55e';
+                td5.style.fontWeight = '600';
+            } else {
+                td5.textContent = '--';
+            }
+        }
+
+        // Registrado
+        var td6 = document.createElement('td');
         if (c.registrado) {
             var regDate = new Date(c.registrado);
-            td5.textContent = regDate.toLocaleDateString('es-CO', {year:'numeric',month:'2-digit',day:'2-digit'}) + ' ' + regDate.toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'});
+            td6.textContent = regDate.toLocaleDateString('es-CO', {month:'2-digit',day:'2-digit'}) + ' ' + regDate.toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'});
         } else {
-            td5.textContent = '--';
+            td6.textContent = '--';
         }
-        td5.style.fontSize = '0.78rem';
-        td5.style.color = 'var(--text-muted)';
-        // Días abierto (desde fecha cierre hasta hoy)
-        var td6 = document.createElement('td');
-        try {
-            var cierreDate = new Date(c.fecha + 'T00:00:00');
-            var diasAbierto = Math.round((today - cierreDate) / 86400000 * 10) / 10;
-            td6.textContent = diasAbierto + 'd';
-            td6.style.fontWeight = '600';
-            td6.style.color = getColorHex(diasAbierto);
-        } catch(e) { td6.textContent = '--'; }
+        td6.style.fontSize = '0.75rem';
+        td6.style.color = 'var(--text-muted)';
+
+        // Eliminar
         var td7 = document.createElement('td');
         var btn = document.createElement('button');
         btn.className = 'btn-danger';
         btn.textContent = 'Eliminar';
         btn.addEventListener('click', function() {
-            CIERRES = CIERRES.filter(function(ci){ return ci.lote !== c.lote || ci.fecha !== c.fecha; });
+            CIERRES = CIERRES.filter(function(ci){ return !(ci.lote === c.lote && ci.tipo === tipo && ci.fecha === c.fecha); });
             saveCierres();
-            // Restore original dias_ciclo for all lots, then re-apply remaining cierres
             DATA.lots.forEach(function(l){ l.dias_ciclo = ORIG_DIAS[l.lote]; });
             applyCierres();
             updateMapColors();
             updateKPIs();
             renderCierresHistorial();
-            deleteCierreFromAPI(c.lote, c.fecha);
+            deleteRegistroFromAPI(c.lote, tipo, c.fecha);
         });
         td7.appendChild(btn);
+
         tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4); tr.appendChild(td5); tr.appendChild(td6); tr.appendChild(td7);
         tbody.appendChild(tr);
     });
