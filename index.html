@@ -387,6 +387,18 @@
                     </div>
                 </div>
             </div>
+            <!-- TRAZABILIDAD POR LOTE -->
+            <div class="card" style="margin-top:1.25rem">
+                <h2>Trazabilidad por Lote</h2>
+                <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem">
+                    <div class="lote-search-wrapper" style="flex:1;max-width:300px">
+                        <input type="text" id="traza-lote" placeholder="Buscar lote..." autocomplete="off" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text)">
+                        <div class="lote-search-dropdown" id="traza-dropdown"></div>
+                    </div>
+                    <span id="traza-estado" style="font-size:0.82rem;color:var(--text-muted)"></span>
+                </div>
+                <div id="traza-content"></div>
+            </div>
         </div>
 
         <!-- LOTES LIST -->
@@ -870,6 +882,7 @@ function initApp() {
     try { renderZonas(); } catch(e) { console.warn('Chart zonas:', e); }
     renderCierresHistorial();
     initCierreForm();
+    initTrazabilidad();
     renderAuxiliares();
     renderMapPanels();
     document.getElementById('cierre-fecha').value = new Date().toISOString().split('T')[0];
@@ -1737,6 +1750,245 @@ function renderCierresHistorial() {
         tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4); tr.appendChild(td5); tr.appendChild(td6); tr.appendChild(td7);
         tbody.appendChild(tr);
     });
+}
+
+// ===== TRAZABILIDAD =====
+function initTrazabilidad() {
+    var input = document.getElementById('traza-lote');
+    var dropdown = document.getElementById('traza-dropdown');
+    if (!input) return;
+
+    input.addEventListener('input', function() {
+        var q = this.value.toUpperCase().trim();
+        if (q.length < 1) { dropdown.classList.remove('open'); return; }
+        var matches = DATA.lots.filter(function(l) {
+            return l.lote.toUpperCase().indexOf(q) >= 0;
+        }).slice(0, 15);
+        while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
+        matches.forEach(function(lot) {
+            var opt = document.createElement('div');
+            opt.className = 'lote-search-option';
+            var nameSpan = document.createElement('span');
+            nameSpan.textContent = lot.lote;
+            var infoSpan = document.createElement('span');
+            infoSpan.className = 'opt-zona';
+            var st = getLotState(lot.lote);
+            var regs = CIERRES.filter(function(c) { return c.lote === lot.lote; });
+            infoSpan.textContent = (lot.zona || '--') + ' | ' + regs.length + ' registros';
+            opt.appendChild(nameSpan);
+            opt.appendChild(infoSpan);
+            opt.addEventListener('click', function() {
+                input.value = lot.lote;
+                dropdown.classList.remove('open');
+                renderTrazabilidad(lot.lote);
+            });
+            dropdown.appendChild(opt);
+        });
+        dropdown.classList.add('open');
+    });
+
+    input.addEventListener('blur', function() {
+        setTimeout(function(){ dropdown.classList.remove('open'); }, 200);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            var lote = this.value.trim().toUpperCase();
+            if (DATA.lotsByName[lote]) {
+                dropdown.classList.remove('open');
+                renderTrazabilidad(lote);
+            }
+        }
+    });
+}
+
+function renderTrazabilidad(lote) {
+    var container = document.getElementById('traza-content');
+    var estado = document.getElementById('traza-estado');
+    container.textContent = '';
+
+    var lot = DATA.lotsByName[lote];
+    if (!lot) { estado.textContent = 'Lote no encontrado'; return; }
+
+    var regs = CIERRES.filter(function(c) { return c.lote === lote; });
+    regs.sort(function(a, b) { return a.fecha.localeCompare(b.fecha) || a.tipo.localeCompare(b.tipo); });
+
+    var state = getLotState(lote);
+    var stText = state.ingresoAbierto ? 'EN PROCESO' : (lot.dias_ciclo !== null ? lot.dias_ciclo + ' dias ciclo' : 'Sin evaluar');
+    estado.textContent = lot.zona + ' | ' + (lot.ruta || '--') + ' | ' + stText;
+    if (state.ingresoAbierto) estado.style.color = '#22c55e';
+    else estado.style.color = 'var(--text-muted)';
+
+    if (regs.length === 0) {
+        var p = document.createElement('p');
+        p.textContent = 'Sin registros para este lote.';
+        p.style.color = 'var(--text-muted)';
+        container.appendChild(p);
+        return;
+    }
+
+    // Build cycles: pair ingresos with cierres
+    var cycles = [];
+    var pendingIngreso = null;
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    regs.forEach(function(r) {
+        if (r.tipo === 'INGRESO') {
+            if (pendingIngreso) {
+                // Ingreso without cierre - push as incomplete
+                cycles.push({ ingreso: pendingIngreso, cierre: null });
+            }
+            pendingIngreso = r;
+        } else if (r.tipo === 'CIERRE') {
+            cycles.push({ ingreso: pendingIngreso, cierre: r });
+            pendingIngreso = null;
+        }
+    });
+    if (pendingIngreso) {
+        cycles.push({ ingreso: pendingIngreso, cierre: null });
+    }
+
+    // Summary stats
+    var completeCycles = cycles.filter(function(c) { return c.ingreso && c.cierre; });
+    var sumDiv = document.createElement('div');
+    sumDiv.style.cssText = 'display:flex;gap:1.5rem;margin-bottom:1rem;flex-wrap:wrap';
+
+    var stats = [
+        { label: 'Total Ciclos', value: cycles.length, color: '#818cf8' },
+        { label: 'Completos', value: completeCycles.length, color: '#22c55e' },
+        { label: 'En Proceso', value: cycles.length - completeCycles.length, color: '#f97316' }
+    ];
+
+    if (completeCycles.length > 0) {
+        var avgDias = completeCycles.reduce(function(s, c) {
+            var d1 = new Date(c.ingreso.fecha + 'T00:00:00');
+            var d2 = new Date(c.cierre.fecha + 'T00:00:00');
+            return s + Math.round((d2 - d1) / 86400000);
+        }, 0) / completeCycles.length;
+        stats.push({ label: 'Prom. Dias Abierto', value: avgDias.toFixed(1), color: '#38bdf8' });
+    }
+
+    // Dias ciclo between consecutive ingresos
+    if (cycles.length >= 2) {
+        var cicloGaps = [];
+        for (var i = 1; i < cycles.length; i++) {
+            if (cycles[i].ingreso && cycles[i-1].ingreso) {
+                var d1 = new Date(cycles[i-1].ingreso.fecha + 'T00:00:00');
+                var d2 = new Date(cycles[i].ingreso.fecha + 'T00:00:00');
+                cicloGaps.push(Math.round((d2 - d1) / 86400000));
+            }
+        }
+        if (cicloGaps.length > 0) {
+            var avgCiclo = cicloGaps.reduce(function(s, v) { return s + v; }, 0) / cicloGaps.length;
+            stats.push({ label: 'Prom. Dias Ciclo', value: avgCiclo.toFixed(1), color: '#a78bfa' });
+        }
+    }
+
+    stats.forEach(function(s) {
+        var box = document.createElement('div');
+        box.style.cssText = 'text-align:center';
+        var val = document.createElement('div');
+        val.style.cssText = 'font-size:1.5rem;font-weight:800;color:' + s.color;
+        val.textContent = s.value;
+        var lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:0.72rem;color:var(--text-muted)';
+        lbl.textContent = s.label;
+        box.appendChild(val);
+        box.appendChild(lbl);
+        sumDiv.appendChild(box);
+    });
+    container.appendChild(sumDiv);
+
+    // Cycles table
+    var table = document.createElement('table');
+    table.style.width = '100%';
+    var thead = document.createElement('thead');
+    var htr = document.createElement('tr');
+    ['#', 'Fecha Ingreso', 'Fecha Cierre', 'Dias Abierto', 'Dias Ciclo', 'Estado'].forEach(function(h) {
+        var th = document.createElement('th');
+        th.textContent = h;
+        htr.appendChild(th);
+    });
+    thead.appendChild(htr);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    cycles.forEach(function(c, idx) {
+        var tr = document.createElement('tr');
+
+        // #
+        var td0 = document.createElement('td');
+        td0.textContent = idx + 1;
+        td0.style.fontWeight = '700';
+        td0.style.color = 'var(--text-muted)';
+
+        // Fecha Ingreso
+        var td1 = document.createElement('td');
+        td1.textContent = c.ingreso ? c.ingreso.fecha : '--';
+        if (c.ingreso) td1.style.color = '#22c55e';
+
+        // Fecha Cierre
+        var td2 = document.createElement('td');
+        td2.textContent = c.cierre ? c.cierre.fecha : '--';
+        if (c.cierre) td2.style.color = '#f97316';
+
+        // Dias Abierto (cierre - ingreso)
+        var td3 = document.createElement('td');
+        if (c.ingreso && c.cierre) {
+            var dI = new Date(c.ingreso.fecha + 'T00:00:00');
+            var dC = new Date(c.cierre.fecha + 'T00:00:00');
+            var dAbierto = Math.round((dC - dI) / 86400000);
+            td3.textContent = dAbierto + 'd';
+            td3.style.color = '#38bdf8';
+            td3.style.fontWeight = '600';
+        } else if (c.ingreso && !c.cierre) {
+            var dI2 = new Date(c.ingreso.fecha + 'T00:00:00');
+            var dOpen = Math.round((today - dI2) / 86400000);
+            td3.textContent = dOpen + 'd';
+            td3.style.color = '#22c55e';
+            td3.style.fontWeight = '600';
+        } else {
+            td3.textContent = '--';
+        }
+
+        // Dias Ciclo (desde ingreso anterior hasta este ingreso)
+        var td4 = document.createElement('td');
+        if (idx > 0 && c.ingreso && cycles[idx - 1].ingreso) {
+            var dPrev = new Date(cycles[idx - 1].ingreso.fecha + 'T00:00:00');
+            var dCurr = new Date(c.ingreso.fecha + 'T00:00:00');
+            var dCiclo = Math.round((dCurr - dPrev) / 86400000);
+            td4.textContent = dCiclo + 'd';
+            td4.style.color = getColorHex(dCiclo);
+            td4.style.fontWeight = '700';
+        } else if (idx === 0) {
+            td4.textContent = 'Inicio';
+            td4.style.color = 'var(--text-muted)';
+        } else {
+            td4.textContent = '--';
+        }
+
+        // Estado
+        var td5 = document.createElement('td');
+        var badge = document.createElement('span');
+        badge.style.cssText = 'padding:2px 8px;border-radius:4px;font-size:0.72rem;font-weight:700;';
+        if (!c.cierre) {
+            badge.textContent = 'ABIERTO';
+            badge.style.background = 'rgba(34,197,94,0.2)';
+            badge.style.color = '#22c55e';
+        } else {
+            badge.textContent = 'CERRADO';
+            badge.style.background = 'rgba(249,115,22,0.2)';
+            badge.style.color = '#f97316';
+        }
+        td5.appendChild(badge);
+
+        tr.appendChild(td0); tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4); tr.appendChild(td5);
+        tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    container.appendChild(table);
 }
 
 // ===== LOTES LIST =====
