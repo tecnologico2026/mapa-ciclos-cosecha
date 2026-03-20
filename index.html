@@ -387,6 +387,20 @@
                     </div>
                 </div>
             </div>
+            <!-- ESTADOS / RESTAURACION -->
+            <div class="card" style="margin-top:1.25rem">
+                <h2>Puntos de Restauracion</h2>
+                <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+                    <button class="btn-primary" id="btn-save-state" style="background:#818cf8">Guardar Estado Actual</button>
+                    <select id="select-restore" style="padding:0.5rem;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);flex:1;max-width:350px">
+                        <option value="">-- Seleccionar punto de restauracion --</option>
+                        <option value="__excel__">Datos Excel original (19-mar-2026)</option>
+                    </select>
+                    <button class="btn-primary" id="btn-restore-state" style="background:#f97316">Restaurar</button>
+                </div>
+                <div id="restore-msg" style="font-size:0.82rem;min-height:1.5rem"></div>
+                <div id="snapshots-list"></div>
+            </div>
             <!-- TRAZABILIDAD POR LOTE -->
             <div class="card" style="margin-top:1.25rem">
                 <h2>Trazabilidad por Lote</h2>
@@ -904,6 +918,7 @@ function initApp() {
     try { renderZonas(); } catch(e) { console.warn('Chart zonas:', e); }
     renderCierresHistorial();
     initCierreForm();
+    initSnapshots();
     initTrazabilidad();
     renderAuxiliares();
     renderMapPanels();
@@ -1773,6 +1788,142 @@ function renderCierresHistorial() {
 
         tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4); tr.appendChild(td5); tr.appendChild(td6); tr.appendChild(td7);
         tbody.appendChild(tr);
+    });
+}
+
+// ===== SNAPSHOTS / RESTAURACION =====
+function getSnapshots() {
+    return JSON.parse(localStorage.getItem('cierres_snapshots') || '[]');
+}
+
+function saveSnapshot(name) {
+    var snapshots = getSnapshots();
+    // Only save non-historical (user-added) cierres
+    var userCierres = CIERRES.filter(function(c) { return c.registrado !== 'HIST'; });
+    snapshots.push({
+        name: name,
+        date: new Date().toISOString(),
+        data: userCierres
+    });
+    localStorage.setItem('cierres_snapshots', JSON.stringify(snapshots));
+}
+
+function deleteSnapshot(idx) {
+    var snapshots = getSnapshots();
+    snapshots.splice(idx, 1);
+    localStorage.setItem('cierres_snapshots', JSON.stringify(snapshots));
+}
+
+function restoreSnapshot(idx) {
+    if (idx === '__excel__') {
+        // Reset to Excel data only
+        localStorage.removeItem('cierres');
+        CIERRES = _RAW_CIERRES_HIST.slice();
+    } else {
+        var snapshots = getSnapshots();
+        var snap = snapshots[idx];
+        if (!snap) return;
+        // Merge historical + snapshot data
+        CIERRES = _RAW_CIERRES_HIST.slice();
+        snap.data.forEach(function(c) {
+            var exists = CIERRES.some(function(h) { return h.lote === c.lote && h.tipo === c.tipo && h.fecha === c.fecha; });
+            if (!exists) CIERRES.push(c);
+        });
+        saveCierres();
+    }
+    // Re-apply everything
+    DATA.lots.forEach(function(l) { l.dias_ciclo = ORIG_DIAS[l.lote]; });
+    applyCierres();
+    updateMapColors();
+    updateKPIs();
+    renderCierresHistorial();
+    renderMapPanels();
+    renderAuxiliares();
+}
+
+function renderSnapshotsList() {
+    var select = document.getElementById('select-restore');
+    if (!select) return;
+    // Keep first two options (placeholder + excel)
+    while (select.options.length > 2) select.remove(2);
+    var snapshots = getSnapshots();
+    snapshots.forEach(function(s, i) {
+        var opt = document.createElement('option');
+        opt.value = i;
+        var d = new Date(s.date);
+        var dateStr = d.toLocaleDateString('es-CO', {day:'2-digit',month:'short',year:'numeric'}) + ' ' + d.toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'});
+        opt.textContent = s.name + ' (' + dateStr + ') - ' + s.data.length + ' registros';
+        select.appendChild(opt);
+    });
+
+    // Render list with delete buttons
+    var list = document.getElementById('snapshots-list');
+    if (!list) return;
+    list.textContent = '';
+    if (snapshots.length === 0) return;
+    var table = document.createElement('table');
+    table.style.width = '100%';
+    table.style.marginTop = '0.75rem';
+    var thead = document.createElement('thead');
+    var htr = document.createElement('tr');
+    ['Nombre', 'Fecha', 'Registros', ''].forEach(function(h) {
+        var th = document.createElement('th'); th.textContent = h; htr.appendChild(th);
+    });
+    thead.appendChild(htr); table.appendChild(thead);
+    var tbody = document.createElement('tbody');
+    snapshots.forEach(function(s, i) {
+        var tr = document.createElement('tr');
+        var td1 = document.createElement('td'); td1.textContent = s.name; td1.style.fontWeight = '600';
+        var td2 = document.createElement('td');
+        var d = new Date(s.date);
+        td2.textContent = d.toLocaleDateString('es-CO', {day:'2-digit',month:'short',year:'numeric'}) + ' ' + d.toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'});
+        td2.style.fontSize = '0.78rem'; td2.style.color = 'var(--text-muted)';
+        var td3 = document.createElement('td'); td3.textContent = s.data.length;
+        var td4 = document.createElement('td');
+        var btn = document.createElement('button');
+        btn.className = 'btn-danger'; btn.textContent = 'Eliminar';
+        btn.addEventListener('click', function() {
+            deleteSnapshot(i);
+            renderSnapshotsList();
+        });
+        td4.appendChild(btn);
+        tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4);
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody); list.appendChild(table);
+}
+
+function initSnapshots() {
+    var btnSave = document.getElementById('btn-save-state');
+    var btnRestore = document.getElementById('btn-restore-state');
+    var select = document.getElementById('select-restore');
+    var msg = document.getElementById('restore-msg');
+    if (!btnSave || !btnRestore) return;
+
+    renderSnapshotsList();
+
+    btnSave.addEventListener('click', function() {
+        var now = new Date();
+        var name = 'Estado ' + now.toLocaleDateString('es-CO', {day:'2-digit',month:'short'}) + ' ' + now.toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'});
+        saveSnapshot(name);
+        renderSnapshotsList();
+        msg.textContent = 'Estado guardado: ' + name;
+        msg.style.color = 'var(--verde)';
+        showNotif('Estado guardado', '#818cf8');
+    });
+
+    btnRestore.addEventListener('click', function() {
+        var val = select.value;
+        if (!val) {
+            msg.textContent = 'Seleccione un punto de restauracion.';
+            msg.style.color = 'var(--rojo)';
+            return;
+        }
+        var label = val === '__excel__' ? 'Datos Excel (19-mar-2026)' : select.options[select.selectedIndex].textContent;
+        restoreSnapshot(val === '__excel__' ? '__excel__' : parseInt(val));
+        msg.textContent = 'Restaurado: ' + label;
+        msg.style.color = 'var(--verde)';
+        showNotif('Restaurado: ' + label, '#f97316');
     });
 }
 
