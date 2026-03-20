@@ -343,7 +343,7 @@
                 <div id="map-panel-atrasados" class="map-panel" style="top:50px;right:10px;"></div>
                 <div id="map-panel-resumen" class="map-panel" style="bottom:10px;left:10px;"></div>
                 <div id="map-panel-detalle" class="map-panel" style="bottom:10px;right:10px;"></div>
-                <div id="map-panel-rendimientos" class="map-panel" style="top:50px;left:280px;padding:0;background:transparent;border:none;backdrop-filter:none;max-height:none;overflow:visible;">&nbsp;</div>
+                <div id="map-panel-rendimientos" class="map-panel" style="top:50px;left:280px;width:580px;padding:0;background:transparent;border:none;backdrop-filter:none;max-height:none;overflow:visible;">&nbsp;</div>
             </div>
         </div>
 
@@ -3508,7 +3508,7 @@ function renderMapPanels() {
 
 var _rendData = null; // cached rendimientos data
 var _rendHiddenRutas = {}; // hidden routes
-var _rendPad = 4; // table cell padding level (0-8)
+var _rendPad = 6; // table cell padding level (0-8)
 var _rendWidth = 100; // table width percentage (50-150)
 
 function loadRendimientos(panel) {
@@ -3527,7 +3527,7 @@ function loadRendimientos(panel) {
     ctrl += '<div style="display:flex;align-items:center;gap:6px;margin-top:0.4rem">';
     ctrl += '<span style="font-size:0.65rem;color:#94a3b8">Tama\u00f1o:</span>';
     ctrl += '<select id="rend-size-select" style="font-size:0.7rem;padding:2px 4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;cursor:pointer">';
-    ctrl += '<option value="xs">XS</option><option value="s">S</option><option value="m" selected>M</option><option value="l">L</option><option value="xl">XL</option>';
+    ctrl += '<option value="xs">XS</option><option value="s">S</option><option value="m">M</option><option value="l" selected>L</option><option value="xl">XL</option>';
     ctrl += '</select>';
     ctrl += '</div>';
     ctrl += '<div style="font-size:0.6rem;color:#64748b;margin-top:0.2rem;text-align:right">Fuente: Cloud SQL (Looker Studio DB)</div>';
