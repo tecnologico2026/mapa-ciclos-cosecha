@@ -3537,7 +3537,7 @@ function renderRendTable() {
 
     var p = _rendPad;
     var thStyle = 'padding:' + p + 'px ' + (p*2) + 'px;background:#cfe2f3;color:#1a1a1a;font-weight:600;font-size:0.78rem;border:1px solid #b4cde6;text-align:center';
-    var html = '<table style="font-size:0.8rem;border-collapse:collapse">';
+    var html = '<table style="font-size:0.8rem;border-collapse:collapse;width:100%">';
     html += '<thead><tr>';
     html += '<th style="' + thStyle + ';text-align:left">Ruta</th>';
     html += '<th style="' + thStyle + '">Flores Totales</th>';
@@ -3565,12 +3565,12 @@ function renderRendTable() {
         var bgColor = idx % 2 === 0 ? '#d9ead3' : '#ffffff';
         var tdStyle = 'padding:' + p + 'px ' + (p*2) + 'px;border:1px solid #d0d0d0;color:#1a1a1a;background:' + bgColor;
         html += '<tr>';
-        html += '<td style="' + tdStyle + ';font-weight:700">' + r.ruta + '</td>';
-        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.flores, 0) + '</td>';
-        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.area, 2) + '</td>';
-        html += '<td style="' + tdStyle + ';text-align:center">' + r.empleados + '</td>';
-        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.promF, 2) + '</td>';
-        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.promA, 2) + '</td>';
+        html += '<td style="' + tdStyle + ';font-weight:700;word-break:break-word">' + r.ruta + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:right;white-space:nowrap">' + fmtEs(r.flores, 0) + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:right;white-space:nowrap">' + fmtEs(r.area, 2) + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:center;white-space:nowrap">' + r.empleados + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:right;white-space:nowrap">' + fmtEs(r.promF, 2) + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:right;white-space:nowrap">' + fmtEs(r.promA, 2) + '</td>';
         html += '</tr>';
     });
     // Total row
