@@ -439,7 +439,7 @@
                 <div class="card"><h2>Resumen General</h2><table id="table-control"><thead><tr><th>Rango</th><th>Lotes</th><th>Has</th><th>%</th></tr></thead><tbody></tbody></table></div>
                 <div class="card full-width"><h2 id="h-ciclos-grupo">Por Zona</h2><div class="chart-container" style="height:320px"><canvas id="chart-zona-ciclos"></canvas></div></div>
             </div>
-            <h2 style="margin:1.5rem 0 1rem;font-size:1.1rem;color:var(--text)">Control por Siembra</h2>
+            <h2 id="h-control-siembra" style="margin:1.5rem 0 1rem;font-size:1.1rem;color:var(--text)">Control por Siembra</h2>
             <div id="control-siembra-grid" class="control-siembra-grid"></div>
             <h2 id="h-ciclos-pasados" style="margin:1.5rem 0 1rem;font-size:1.1rem;color:var(--text)">Lotes Pasados por Zona</h2>
             <div id="control-zona-pasados" class="control-siembra-grid"></div>
@@ -2305,8 +2305,14 @@ function renderChartZonaCiclos() {
     canvas._chart = new Chart(canvas,{type:'bar',data:{labels:groups,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8'}}},scales:{x:{stacked:true,ticks:{color:'#94a3b8',font:{size:isPoli?9:12}},grid:{color:'rgba(255,255,255,0.05)'}},y:{stacked:true,ticks:{color:'#94a3b8'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
 }
 function renderControlSiembra() {
-    // Group definitions matching Excel "CICLOS COSECHA" sheet
-    var GROUPS = [
+    var isPoli = ACTIVE_LABOR === 'polinizacion';
+    var hTitle = document.getElementById('h-control-siembra');
+    if (hTitle) hTitle.textContent = isPoli ? 'Control por Ruta' : 'Control por Siembra';
+
+    var labor = CYCLES_DB[ACTIVE_LABOR];
+    var col = labor ? labor.colores : {verde:[0,14],amarillo:[14.1,17],naranja:[17.1,20],rojo:[20.1,99999]};
+
+    var GROUPS_COSECHA = [
         {name: 'Adulta', siembras: [1978,1981,1982,1984,1985,1986,1988,1990,1991,1995,1999,2000,2002,2003,2006,2007], meta: 14, zona: 'ADULTA'},
         {name: 'Siembra 2010', siembras: [2010], meta: 14},
         {name: 'Siembra 2011', siembras: [2011], meta: 14},
@@ -2317,25 +2323,52 @@ function renderControlSiembra() {
         {name: 'Siembra 2018', siembras: [2018], meta: 12},
         {name: 'Siembra 2019', siembras: [2019], meta: 12}
     ];
+
     var grid = document.getElementById('control-siembra-grid');
     grid.textContent = '';
 
-    GROUPS.forEach(function(g) {
-        var lots = DATA.lots.filter(function(l) {
-            return g.siembras.indexOf(l.siembra) >= 0;
+    // Build group list: by ruta for poli, by siembra for cosecha
+    var cardGroups = [];
+    if (isPoli) {
+        var rutaSet = {};
+        DATA.lots.forEach(function(l) { if (l.ruta) rutaSet[l.ruta] = true; });
+        Object.keys(rutaSet).sort().forEach(function(ruta) {
+            var lots = DATA.lots.filter(function(l) { return l.ruta === ruta; });
+            cardGroups.push({name: ruta, lots: lots});
         });
+    } else {
+        GROUPS_COSECHA.forEach(function(g) {
+            var lots = DATA.lots.filter(function(l) { return g.siembras.indexOf(l.siembra) >= 0; });
+            if (lots.length > 0) cardGroups.push({name: g.name, lots: lots, meta: g.meta});
+        });
+    }
+
+    cardGroups.forEach(function(g) {
+        var lots = g.lots;
         if (lots.length === 0) return;
 
         var totalHas = 0;
         var enCiclo = 0, hasEnCiclo = 0;
         var atrasados = 0, hasAtrasados = 0;
         var sinEval = 0;
-        // Ranges: verde (0 to meta), amarillo (meta to meta*1.2), rojo (>meta*1.2)
-        var meta = g.meta;
-        var r1 = {label: '0 - ' + meta + 'd', has: 0, count: 0, color: '#22c55e'};
-        var r2 = {label: meta + ' - ' + Math.round(meta * 1.4) + 'd', has: 0, count: 0, color: '#eab308'};
-        var r3 = {label: '> ' + Math.round(meta * 1.4) + 'd', has: 0, count: 0, color: '#ef4444'};
-        var rSin = {label: 'Sin evaluar', has: 0, count: 0, color: '#64748b'};
+
+        var r1, r2, r3, r4, rSin;
+        if (isPoli) {
+            // Use 4 color ranges from CYCLES_DB
+            r1 = {label: col.verde[0]+'-'+col.verde[1]+'d', has: 0, count: 0, color: '#22c55e', min: col.verde[0], max: col.verde[1]};
+            r2 = {label: col.amarillo[0]+'-'+col.amarillo[1]+'d', has: 0, count: 0, color: '#eab308', min: col.amarillo[0], max: col.amarillo[1]};
+            r3 = {label: col.naranja[0]+'-'+col.naranja[1]+'d', has: 0, count: 0, color: '#f97316', min: col.naranja[0], max: col.naranja[1]};
+            r4 = {label: '+'+col.rojo[0]+'d', has: 0, count: 0, color: '#ef4444', min: col.rojo[0], max: 99999};
+        } else {
+            var meta = g.meta || 14;
+            r1 = {label: '0-'+meta+'d', has: 0, count: 0, color: '#22c55e', min: 0, max: meta};
+            r2 = {label: meta+'-'+Math.round(meta*1.4)+'d', has: 0, count: 0, color: '#eab308', min: meta+0.1, max: Math.round(meta*1.4)};
+            r3 = {label: '>'+Math.round(meta*1.4)+'d', has: 0, count: 0, color: '#ef4444', min: Math.round(meta*1.4)+0.1, max: 99999};
+            r4 = null;
+        }
+        rSin = {label: 'Sin evaluar', has: 0, count: 0, color: '#64748b'};
+
+        var rangeList = isPoli ? [r1,r2,r3,r4] : [r1,r2,r3];
 
         lots.forEach(function(l) {
             var h = l.has || 0;
@@ -2346,15 +2379,19 @@ function renderControlSiembra() {
                 rSin.has += h; rSin.count++;
                 return;
             }
-            if (dc <= meta) {
+            var placed = false;
+            for (var ri = 0; ri < rangeList.length; ri++) {
+                if (dc >= rangeList[ri].min && dc <= rangeList[ri].max) {
+                    rangeList[ri].has += h; rangeList[ri].count++;
+                    placed = true;
+                    break;
+                }
+            }
+            // Determine en ciclo vs atrasado (first range = en ciclo)
+            if (dc <= rangeList[0].max) {
                 enCiclo++; hasEnCiclo += h;
-                r1.has += h; r1.count++;
-            } else if (dc <= meta * 1.4) {
-                r2.has += h; r2.count++;
-                atrasados++; hasAtrasados += h;
             } else {
                 atrasados++; hasAtrasados += h;
-                r3.has += h; r3.count++;
             }
         });
 
@@ -2383,10 +2420,11 @@ function renderControlSiembra() {
         // Stats
         var stats = document.createElement('div');
         stats.className = 'ctrl-stats';
+        var metaLabel = isPoli ? col.verde[1]+' dias' : (g.meta||14)+' dias';
         var statsData = [
             ['Lotes', lots.length],
             ['Has', totalHas.toFixed(1)],
-            ['Meta ciclo', meta + ' dias'],
+            ['Meta ciclo', metaLabel],
             ['En ciclo', enCiclo + ' (' + pctEnCiclo + '%)']
         ];
         statsData.forEach(function(s) {
@@ -2404,7 +2442,7 @@ function renderControlSiembra() {
         // Ranges
         var ranges = document.createElement('div');
         ranges.className = 'ctrl-ranges';
-        [r1, r2, r3, rSin].forEach(function(r) {
+        rangeList.concat([rSin]).forEach(function(r) {
             if (r.count === 0 && r !== rSin) return;
             var row = document.createElement('div');
             row.className = 'ctrl-range-row';
@@ -2428,7 +2466,7 @@ function renderControlSiembra() {
         // Stacked bar
         var bar = document.createElement('div');
         bar.className = 'ctrl-bar';
-        [r1, r2, r3, rSin].forEach(function(r) {
+        rangeList.concat([rSin]).forEach(function(r) {
             if (r.has <= 0) return;
             var seg = document.createElement('span');
             seg.style.width = (r.has / totalHas * 100) + '%';
