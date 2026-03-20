@@ -3416,41 +3416,120 @@ function renderMapPanels() {
     }
 }
 
+var _rendData = null; // cached rendimientos data
+var _rendHiddenRutas = {}; // hidden routes
+
 function loadRendimientos(panel) {
-    fetch(API_URL + '?action=rendimientos')
+    var today = new Date().toISOString().slice(0,10);
+    // Build controls
+    var ctrl = '<div class="map-panel-title" style="margin-bottom:0.3rem">RENDIMIENTOS POLINIZACIÓN POR RUTA</div>';
+    ctrl += '<div style="display:flex;gap:0.3rem;align-items:center;margin-bottom:0.3rem;flex-wrap:wrap">';
+    ctrl += '<label style="font-size:0.6rem;color:#94a3b8">Desde:</label>';
+    ctrl += '<input type="date" id="rend-desde" value="' + today + '" style="font-size:0.6rem;padding:1px 3px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px">';
+    ctrl += '<label style="font-size:0.6rem;color:#94a3b8">Hasta:</label>';
+    ctrl += '<input type="date" id="rend-hasta" value="' + today + '" style="font-size:0.6rem;padding:1px 3px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px">';
+    ctrl += '<button id="rend-apply" style="font-size:0.6rem;padding:1px 6px;background:#3b82f6;color:#fff;border:none;border-radius:3px;cursor:pointer">Consultar</button>';
+    ctrl += '</div>';
+    ctrl += '<div id="rend-rutas-filter" style="display:flex;gap:0.2rem;flex-wrap:wrap;margin-bottom:0.3rem"></div>';
+    ctrl += '<div id="rend-table-area"><div style="text-align:center;color:#94a3b8;font-size:0.65rem;padding:0.5rem">Cargando...</div></div>';
+    ctrl += '<div style="font-size:0.5rem;color:#64748b;margin-top:0.2rem;text-align:right">Fuente: Cloud SQL (Looker Studio DB)</div>';
+    panel.innerHTML = ctrl;
+
+    // Event listeners
+    document.getElementById('rend-apply').addEventListener('click', function(e) {
+        e.stopPropagation();
+        panel._loaded = false;
+        _rendData = null;
+        fetchRendimientos(panel);
+    });
+    // Prevent drag when interacting with inputs
+    panel.querySelectorAll('input,button').forEach(function(el) {
+        el.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
+    });
+
+    fetchRendimientos(panel);
+}
+
+function fetchRendimientos(panel) {
+    var desde = document.getElementById('rend-desde').value || '';
+    var hasta = document.getElementById('rend-hasta').value || '';
+    var tableArea = document.getElementById('rend-table-area');
+    if (tableArea) tableArea.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:0.65rem;padding:0.5rem">Consultando...</div>';
+
+    var url = API_URL + '?action=rendimientos';
+    if (desde) url += '&desde=' + desde;
+    if (hasta) url += '&hasta=' + hasta;
+
+    fetch(url)
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.error) {
-                panel.innerHTML = '<div class="map-panel-title">Rendimientos</div><div style="color:#ef4444;font-size:0.7rem;padding:0.3rem">' + data.error + '</div>';
+                if (tableArea) tableArea.innerHTML = '<div style="color:#ef4444;font-size:0.65rem;padding:0.3rem">' + data.error + '</div>';
                 return;
             }
-            var rows = data.rendimientos || [];
-            var html = '<div class="map-panel-title" style="margin-bottom:0.3rem">Rendimientos Polinización por Ruta</div>';
-            html += '<table><thead><tr><th>Ruta</th><th>Registros</th><th>Flores</th><th>Has</th><th>Prom Flores</th></tr></thead><tbody>';
-            var totReg = 0, totFlores = 0, totArea = 0;
-            rows.forEach(function(r) {
-                var reg = parseInt(r.registros) || 0;
-                var flores = parseInt(r.flores_totales) || 0;
-                var area = parseFloat(r.area_total) || 0;
-                var promF = parseFloat(r.prom_flores) || 0;
-                totReg += reg;
-                totFlores += flores;
-                totArea += area;
-                html += '<tr><td>' + (r.Ruta || r.ruta || '') + '</td>';
-                html += '<td class="num">' + reg.toLocaleString() + '</td>';
-                html += '<td class="num">' + flores.toLocaleString() + '</td>';
-                html += '<td class="num">' + area.toFixed(1) + '</td>';
-                html += '<td class="num">' + promF.toFixed(0) + '</td></tr>';
-            });
-            html += '<tr class="total-row"><td>TOTAL</td><td class="num">' + totReg.toLocaleString() + '</td><td class="num">' + totFlores.toLocaleString() + '</td><td class="num">' + totArea.toFixed(1) + '</td><td class="num">' + (totReg > 0 ? (totFlores/totReg).toFixed(0) : '0') + '</td></tr>';
-            html += '</tbody></table>';
-            html += '<div style="font-size:0.55rem;color:#64748b;margin-top:0.2rem;text-align:right">Fuente: Cloud SQL (Looker Studio DB)</div>';
-            panel.innerHTML = html;
+            _rendData = data.rendimientos || [];
+            _rendHiddenRutas = {};
+            renderRendFilters(panel);
+            renderRendTable();
             panel._loaded = true;
         })
         .catch(function(err) {
-            panel.innerHTML = '<div class="map-panel-title">Rendimientos</div><div style="color:#ef4444;font-size:0.7rem;padding:0.3rem">Error: ' + err.message + '</div>';
+            if (tableArea) tableArea.innerHTML = '<div style="color:#ef4444;font-size:0.65rem;padding:0.3rem">Error: ' + err.message + '</div>';
         });
+}
+
+function renderRendFilters(panel) {
+    var container = document.getElementById('rend-rutas-filter');
+    if (!container || !_rendData) return;
+    var html = '';
+    _rendData.forEach(function(r) {
+        var ruta = r.Ruta || r.ruta || '';
+        var active = !_rendHiddenRutas[ruta];
+        var bg = active ? '#3b82f6' : '#334155';
+        var color = active ? '#fff' : '#64748b';
+        html += '<button class="rend-ruta-btn" data-ruta="' + ruta + '" style="font-size:0.55rem;padding:1px 4px;background:' + bg + ';color:' + color + ';border:1px solid #475569;border-radius:3px;cursor:pointer">' + ruta + '</button>';
+    });
+    container.innerHTML = html;
+    container.querySelectorAll('.rend-ruta-btn').forEach(function(btn) {
+        btn.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var ruta = btn.getAttribute('data-ruta');
+            if (_rendHiddenRutas[ruta]) {
+                delete _rendHiddenRutas[ruta];
+            } else {
+                _rendHiddenRutas[ruta] = true;
+            }
+            renderRendFilters(document.getElementById('map-panel-rendimientos'));
+            renderRendTable();
+        });
+    });
+}
+
+function renderRendTable() {
+    var tableArea = document.getElementById('rend-table-area');
+    if (!tableArea || !_rendData) return;
+    var html = '<table><thead><tr><th>Ruta</th><th>Registros</th><th>Flores</th><th>Has</th><th>Prom Flores</th></tr></thead><tbody>';
+    var totReg = 0, totFlores = 0, totArea = 0;
+    _rendData.forEach(function(r) {
+        var ruta = r.Ruta || r.ruta || '';
+        if (_rendHiddenRutas[ruta]) return;
+        var reg = parseInt(r.registros) || 0;
+        var flores = parseInt(r.flores_totales) || 0;
+        var area = parseFloat(r.area_total) || 0;
+        var promF = parseFloat(r.prom_flores) || 0;
+        totReg += reg;
+        totFlores += flores;
+        totArea += area;
+        html += '<tr><td>' + ruta + '</td>';
+        html += '<td class="num">' + reg.toLocaleString() + '</td>';
+        html += '<td class="num">' + flores.toLocaleString() + '</td>';
+        html += '<td class="num">' + area.toFixed(1) + '</td>';
+        html += '<td class="num">' + promF.toFixed(0) + '</td></tr>';
+    });
+    html += '<tr class="total-row"><td>TOTAL</td><td class="num">' + totReg.toLocaleString() + '</td><td class="num">' + totFlores.toLocaleString() + '</td><td class="num">' + totArea.toFixed(1) + '</td><td class="num">' + (totReg > 0 ? (totFlores/totReg).toFixed(0) : '0') + '</td></tr>';
+    html += '</tbody></table>';
+    tableArea.innerHTML = html;
 }
 
 // ===== DRAGGABLE MAP PANELS =====

@@ -43,7 +43,9 @@ function doGet(e) {
     var fecha = e.parameter.fecha || '';
     result = deleteRegistro(lote, 'CIERRE', fecha);
   } else if (action === 'rendimientos') {
-    result = getRendimientosPolinizacion();
+    var desde = e.parameter.desde || '';
+    var hasta = e.parameter.hasta || '';
+    result = getRendimientosPolinizacion(desde, hasta);
   } else if (action === 'db_explore') {
     var tabla = e.parameter.tabla || 'Ejecucion_Polinizacion';
     result = dbExplore(tabla);
@@ -276,8 +278,11 @@ function dbExplore(tabla) {
   }
 }
 
-function getRendimientosPolinizacion() {
+function getRendimientosPolinizacion(desde, hasta) {
   try {
+    var where = 'WHERE ep.Ruta IS NOT NULL AND ep.Ruta != ""';
+    if (desde) where += ' AND ep.fecha >= "' + desde + '"';
+    if (hasta) where += ' AND ep.fecha <= "' + hasta + '"';
     var result = dbQuery(
       'SELECT ep.Ruta as ruta, ' +
       'COUNT(*) as registros, ' +
@@ -287,7 +292,7 @@ function getRendimientosPolinizacion() {
       'AVG(CAST(ep.`Flores Totales` AS SIGNED)) as prom_flores, ' +
       'AVG(CAST(ep.area_total AS DECIMAL(10,2))) as prom_area ' +
       'FROM Ejecucion_Polinizacion ep ' +
-      'WHERE ep.Ruta IS NOT NULL AND ep.Ruta != "" ' +
+      where + ' ' +
       'GROUP BY ep.Ruta ' +
       'ORDER BY ep.Ruta'
     );
