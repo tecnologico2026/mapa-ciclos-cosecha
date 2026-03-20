@@ -3436,8 +3436,11 @@ function loadRendimientos(panel) {
     ctrl += '<div style="font-size:0.6rem;color:#64748b;margin-top:0.3rem;text-align:right">Fuente: Cloud SQL (Looker Studio DB)</div>';
     ctrl += '</div>';
     ctrl += '</div>';
-    // Resize handle
-    ctrl += '<div id="rend-resize-handle" style="position:absolute;bottom:0;right:0;width:18px;height:18px;cursor:nwse-resize;display:flex;align-items:center;justify-content:center;color:#16a34a;font-size:12px;user-select:none" title="Arrastrar para redimensionar">&#9698;</div>';
+    ctrl += '<div style="display:flex;justify-content:flex-end;gap:4px;margin-top:2px">';
+    ctrl += '<button id="rend-zoom-out" style="font-size:0.7rem;padding:1px 6px;background:#16a34a;color:#fff;border:none;border-radius:3px;cursor:pointer;font-weight:800" title="Reducir">-</button>';
+    ctrl += '<span id="rend-zoom-label" style="font-size:0.6rem;color:#94a3b8;line-height:1.8">100%</span>';
+    ctrl += '<button id="rend-zoom-in" style="font-size:0.7rem;padding:1px 6px;background:#16a34a;color:#fff;border:none;border-radius:3px;cursor:pointer;font-weight:800" title="Ampliar">+</button>';
+    ctrl += '</div>';
     panel.innerHTML = ctrl;
 
     document.getElementById('rend-apply').addEventListener('click', function(e) {
@@ -3450,37 +3453,26 @@ function loadRendimientos(panel) {
         el.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
     });
 
-    // Resize handle logic
-    var handle = document.getElementById('rend-resize-handle');
+    // Zoom buttons
     var scalable = document.getElementById('rend-scalable');
-    if (handle && scalable) {
-        var _rScale = 1;
-        var _rStartX, _rStartY, _rStartScale;
-        handle.addEventListener('pointerdown', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            _rStartX = e.clientX;
-            _rStartY = e.clientY;
-            _rStartScale = _rScale;
-            handle.setPointerCapture(e.pointerId);
-
-            function onMove(ev) {
-                ev.stopPropagation();
-                var dx = ev.clientX - _rStartX;
-                var dy = ev.clientY - _rStartY;
-                var delta = (dx + dy) / 2;
-                var baseW = scalable.offsetWidth / _rStartScale;
-                _rScale = Math.max(0.4, Math.min(1.5, _rStartScale + delta / baseW));
-                scalable.style.transform = 'scale(' + _rScale + ')';
-            }
-            function onUp(ev) {
-                handle.removeEventListener('pointermove', onMove);
-                handle.removeEventListener('pointerup', onUp);
-            }
-            handle.addEventListener('pointermove', onMove);
-            handle.addEventListener('pointerup', onUp);
-        });
+    var zoomLabel = document.getElementById('rend-zoom-label');
+    var _rScale = 1;
+    function applyRendScale() {
+        if (scalable) scalable.style.transform = 'scale(' + _rScale + ')';
+        if (zoomLabel) zoomLabel.textContent = Math.round(_rScale * 100) + '%';
     }
+    document.getElementById('rend-zoom-out').addEventListener('pointerdown', function(e) { e.stopPropagation(); });
+    document.getElementById('rend-zoom-in').addEventListener('pointerdown', function(e) { e.stopPropagation(); });
+    document.getElementById('rend-zoom-out').addEventListener('click', function(e) {
+        e.stopPropagation();
+        _rScale = Math.max(0.3, _rScale - 0.1);
+        applyRendScale();
+    });
+    document.getElementById('rend-zoom-in').addEventListener('click', function(e) {
+        e.stopPropagation();
+        _rScale = Math.min(1.5, _rScale + 0.1);
+        applyRendScale();
+    });
 
     fetchRendimientos(panel);
 }
