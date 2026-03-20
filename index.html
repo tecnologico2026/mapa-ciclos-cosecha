@@ -2233,13 +2233,37 @@ function renderLotes(zone) {
 }
 
 // ===== CHARTS & TABLES =====
+function buildControlGeneral() {
+    var labor = CYCLES_DB[ACTIVE_LABOR];
+    var c = labor ? labor.colores : {verde:[0,14],amarillo:[14.1,17],naranja:[17.1,20],rojo:[20.1,99999]};
+    var rangos = [
+        {nombre: c.verde[0]+' A '+c.verde[1]+' DIAS', min: c.verde[0], max: c.verde[1], color: '#22c55e'},
+        {nombre: c.amarillo[0]+' A '+c.amarillo[1]+' DIAS', min: c.amarillo[0], max: c.amarillo[1], color: '#eab308'},
+        {nombre: c.naranja[0]+' A '+c.naranja[1]+' DIAS', min: c.naranja[0], max: c.naranja[1], color: '#f97316'},
+        {nombre: '+'+c.rojo[0]+' DIAS', min: c.rojo[0], max: 99999, color: '#ef4444'}
+    ];
+    var totalLotes = 0, totalHas = 0;
+    var items = rangos.map(function(r) {
+        var lots = DATA.lots.filter(function(l) {
+            return l.dias_ciclo !== null && l.dias_ciclo < 49000 && l.dias_ciclo >= r.min && l.dias_ciclo <= r.max;
+        });
+        var has = 0;
+        lots.forEach(function(l) { has += (l.has || 0); });
+        totalLotes += lots.length;
+        totalHas += has;
+        return {rango: r.nombre, lotes: lots.length, has: Math.round(has*10)/10, porcentaje: 0, color: r.color};
+    });
+    items.forEach(function(it) { it.porcentaje = totalHas > 0 ? Math.round(it.has / totalHas * 1000)/10 : 0; });
+    items.push({rango: 'TOTAL', lotes: totalLotes, has: Math.round(totalHas*10)/10, porcentaje: 100, color: '#94a3b8'});
+    return items;
+}
 function renderControl() {
     var tbody = document.querySelector('#table-control tbody');
     tbody.textContent = '';
-    var colors = ['#22c55e','#eab308','#f97316','#ef4444','#94a3b8'];
-    DATA.control_general.forEach(function(c,i) {
+    var items = buildControlGeneral();
+    items.forEach(function(c) {
         var tr = document.createElement('tr');
-        var td1 = document.createElement('td'); var sp = document.createElement('span'); sp.style.color=colors[i]||'#94a3b8'; sp.textContent=c.rango; td1.appendChild(sp);
+        var td1 = document.createElement('td'); var sp = document.createElement('span'); sp.style.color=c.color; sp.textContent=c.rango; td1.appendChild(sp);
         var td2 = document.createElement('td'); td2.textContent = c.lotes;
         var td3 = document.createElement('td'); td3.textContent = c.has.toLocaleString();
         var td4 = document.createElement('td'); td4.textContent = c.porcentaje+'%';
@@ -2247,8 +2271,10 @@ function renderControl() {
     });
 }
 function renderChartCiclos() {
-    var items = DATA.control_general.filter(function(c){return c.rango!=='TOTAL';});
-    new Chart(document.getElementById('chart-ciclos'),{type:'doughnut',data:{labels:items.map(function(c){return c.rango;}),datasets:[{data:items.map(function(c){return c.has;}),backgroundColor:['#22c55e','#eab308','#f97316','#ef4444'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',padding:12}}}}});
+    var items = buildControlGeneral().filter(function(c){return c.rango!=='TOTAL';});
+    var canvas = document.getElementById('chart-ciclos');
+    if (canvas._chart) canvas._chart.destroy();
+    canvas._chart = new Chart(canvas,{type:'doughnut',data:{labels:items.map(function(c){return c.rango;}),datasets:[{data:items.map(function(c){return c.has;}),backgroundColor:items.map(function(c){return c.color;}),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',padding:12}}}}});
 }
 function renderChartZonaCiclos() {
     var isPoli = ACTIVE_LABOR === 'polinizacion';
