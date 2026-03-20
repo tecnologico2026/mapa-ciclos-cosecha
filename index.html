@@ -3421,7 +3421,8 @@ var _rendHiddenRutas = {}; // hidden routes
 
 function loadRendimientos(panel) {
     var today = new Date().toISOString().slice(0,10);
-    var ctrl = '<div style="background:#22c55e;color:#fff;font-weight:800;font-size:0.9rem;text-align:center;padding:6px 10px;border-radius:6px 6px 0 0;border:2px solid #16a34a;border-bottom:none;letter-spacing:0.02em">Rendimientos Ciclos Polinizaci\u00f3n Por Ruta</div>';
+    var ctrl = '<div id="rend-scalable" style="transform-origin:top left;transition:transform 0.1s">';
+    ctrl += '<div style="background:#22c55e;color:#fff;font-weight:800;font-size:0.9rem;text-align:center;padding:6px 10px;border-radius:6px 6px 0 0;border:2px solid #16a34a;border-bottom:none;letter-spacing:0.02em">Rendimientos Ciclos Polinizaci\u00f3n Por Ruta</div>';
     ctrl += '<div style="background:rgba(30,41,59,0.95);border:2px solid #16a34a;border-top:none;border-radius:0 0 6px 6px;padding:0.5rem">';
     ctrl += '<div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap">';
     ctrl += '<label style="font-size:0.75rem;color:#94a3b8">Desde:</label>';
@@ -3434,6 +3435,9 @@ function loadRendimientos(panel) {
     ctrl += '<div id="rend-table-area"><div style="text-align:center;color:#94a3b8;font-size:0.8rem;padding:0.5rem">Cargando...</div></div>';
     ctrl += '<div style="font-size:0.6rem;color:#64748b;margin-top:0.3rem;text-align:right">Fuente: Cloud SQL (Looker Studio DB)</div>';
     ctrl += '</div>';
+    ctrl += '</div>';
+    // Resize handle
+    ctrl += '<div id="rend-resize-handle" style="position:absolute;bottom:0;right:0;width:18px;height:18px;cursor:nwse-resize;display:flex;align-items:center;justify-content:center;color:#16a34a;font-size:12px;user-select:none" title="Arrastrar para redimensionar">&#9698;</div>';
     panel.innerHTML = ctrl;
 
     document.getElementById('rend-apply').addEventListener('click', function(e) {
@@ -3445,6 +3449,38 @@ function loadRendimientos(panel) {
     panel.querySelectorAll('input,button').forEach(function(el) {
         el.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
     });
+
+    // Resize handle logic
+    var handle = document.getElementById('rend-resize-handle');
+    var scalable = document.getElementById('rend-scalable');
+    if (handle && scalable) {
+        var _rScale = 1;
+        var _rStartX, _rStartY, _rStartScale;
+        handle.addEventListener('pointerdown', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            _rStartX = e.clientX;
+            _rStartY = e.clientY;
+            _rStartScale = _rScale;
+            handle.setPointerCapture(e.pointerId);
+
+            function onMove(ev) {
+                ev.stopPropagation();
+                var dx = ev.clientX - _rStartX;
+                var dy = ev.clientY - _rStartY;
+                var delta = (dx + dy) / 2;
+                var baseW = scalable.offsetWidth / _rStartScale;
+                _rScale = Math.max(0.4, Math.min(1.5, _rStartScale + delta / baseW));
+                scalable.style.transform = 'scale(' + _rScale + ')';
+            }
+            function onUp(ev) {
+                handle.removeEventListener('pointermove', onMove);
+                handle.removeEventListener('pointerup', onUp);
+            }
+            handle.addEventListener('pointermove', onMove);
+            handle.addEventListener('pointerup', onUp);
+        });
+    }
 
     fetchRendimientos(panel);
 }
