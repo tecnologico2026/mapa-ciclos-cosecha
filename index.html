@@ -3465,8 +3465,9 @@ function loadRendimientos(panel) {
     wSlider.addEventListener('input', function(e) {
         e.stopPropagation();
         _rendWidth = parseInt(wSlider.value);
-        var ta = document.getElementById('rend-table-area');
-        if (ta) ta.style.width = _rendWidth + '%';
+        // Adjust entire panel width
+        var baseWidth = 500;
+        panel.style.width = Math.round(baseWidth * _rendWidth / 100) + 'px';
     });
 
     fetchRendimientos(panel);
