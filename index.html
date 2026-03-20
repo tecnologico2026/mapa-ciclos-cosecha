@@ -344,6 +344,7 @@
                 <div id="map-panel-atrasados" class="map-panel" style="top:50px;right:10px;"></div>
                 <div id="map-panel-resumen" class="map-panel" style="bottom:10px;left:10px;"></div>
                 <div id="map-panel-detalle" class="map-panel" style="bottom:10px;right:10px;"></div>
+                <div id="map-panel-rendimientos" class="map-panel" style="top:50px;left:50%;transform:translateX(-50%);display:none;"></div>
             </div>
         </div>
 
@@ -474,6 +475,7 @@
         <div class="tab-content" id="tab-auxiliares">
             <div id="auxiliares-dashboard"></div>
         </div>
+
     </div>
 
     <!-- TOOLTIP -->
@@ -503,7 +505,7 @@ _CIERRES_LOCAL.forEach(function(c) {
     var exists = CIERRES.some(function(h) { return h.lote === c.lote && h.tipo === c.tipo && h.fecha === c.fecha; });
     if (!exists) CIERRES.push(c);
 });
-var API_URL = 'https://script.google.com/macros/s/AKfycbwd7to2Xn7LRIVeNtD7MLPCRCl1vehzfQ-30oKNzgVlXB1DSr2ZS9vQCvQP8K2datRR/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbzQb3LoCc-woYqdDsQFjMDc4ur13vF4hL0ox76MWEoQetBftps5SC-iwz8j5_E3jow5/exec';
 var API_DATA = {}; // Cache of API responses per labor
 
 function loadData() {
@@ -3396,6 +3398,57 @@ function renderMapPanels() {
         temp3.innerHTML = html3;
         while (temp3.firstChild) p3.appendChild(temp3.firstChild);
     }
+
+    // ---- Panel Rendimientos (solo polinización) ----
+    var pRend = document.getElementById('map-panel-rendimientos');
+    if (pRend) {
+        if (ACTIVE_LABOR === 'polinizacion') {
+            pRend.style.display = '';
+            if (!pRend._loaded) {
+                pRend.innerHTML = '<div class="map-panel-title">Rendimientos Polinización por Ruta</div><div style="text-align:center;color:#94a3b8;font-size:0.7rem;padding:0.5rem">Cargando...</div>';
+                loadRendimientos(pRend);
+            }
+        } else {
+            pRend.style.display = 'none';
+        }
+    }
+}
+
+function loadRendimientos(panel) {
+    fetch(API_URL + '?action=rendimientos')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                panel.innerHTML = '<div class="map-panel-title">Rendimientos</div><div style="color:#ef4444;font-size:0.7rem;padding:0.3rem">' + data.error + '</div>';
+                return;
+            }
+            var rows = data.rendimientos || [];
+            var html = '<div class="map-panel-title" style="margin-bottom:0.3rem">Rendimientos Polinización por Ruta</div>';
+            html += '<table><thead><tr><th>Ruta</th><th>Registros</th><th>Flores</th><th>Has</th><th>Prom Flores</th></tr></thead><tbody>';
+            var totReg = 0, totFlores = 0, totArea = 0;
+            rows.forEach(function(r) {
+                var reg = parseInt(r.registros) || 0;
+                var flores = parseInt(r.flores_totales) || 0;
+                var area = parseFloat(r.area_total) || 0;
+                var promF = parseFloat(r.prom_flores) || 0;
+                totReg += reg;
+                totFlores += flores;
+                totArea += area;
+                html += '<tr><td>' + (r.Ruta || r.ruta || '') + '</td>';
+                html += '<td class="num">' + reg.toLocaleString() + '</td>';
+                html += '<td class="num">' + flores.toLocaleString() + '</td>';
+                html += '<td class="num">' + area.toFixed(1) + '</td>';
+                html += '<td class="num">' + promF.toFixed(0) + '</td></tr>';
+            });
+            html += '<tr class="total-row"><td>TOTAL</td><td class="num">' + totReg.toLocaleString() + '</td><td class="num">' + totFlores.toLocaleString() + '</td><td class="num">' + totArea.toFixed(1) + '</td><td class="num">' + (totReg > 0 ? (totFlores/totReg).toFixed(0) : '0') + '</td></tr>';
+            html += '</tbody></table>';
+            html += '<div style="font-size:0.55rem;color:#64748b;margin-top:0.2rem;text-align:right">Fuente: Cloud SQL (Looker Studio DB)</div>';
+            panel.innerHTML = html;
+            panel._loaded = true;
+        })
+        .catch(function(err) {
+            panel.innerHTML = '<div class="map-panel-title">Rendimientos</div><div style="color:#ef4444;font-size:0.7rem;padding:0.3rem">Error: ' + err.message + '</div>';
+        });
 }
 
 // ===== DRAGGABLE MAP PANELS =====

@@ -42,6 +42,11 @@ function doGet(e) {
     var lote = e.parameter.lote || '';
     var fecha = e.parameter.fecha || '';
     result = deleteRegistro(lote, 'CIERRE', fecha);
+  } else if (action === 'rendimientos') {
+    result = getRendimientosPolinizacion();
+  } else if (action === 'db_explore') {
+    var tabla = e.parameter.tabla || 'Ejecucion_Polinizacion';
+    result = dbExplore(tabla);
   }
 
   return ContentService
@@ -232,4 +237,62 @@ function deleteRegistro(lote, tipo, fecha) {
   }
 
   return { success: false, error: 'Registro no encontrado' };
+}
+
+// ===== CLOUD SQL - SOLO LECTURA =====
+// CREDENCIALES EN APPS SCRIPT SOLAMENTE - NO SUBIR A GITHUB
+var DB_URL = 'jdbc:google:mysql://INSTANCE/DATABASE';
+var DB_USER = 'USER';
+var DB_PASS = 'PASSWORD';
+
+function dbQuery(sql) {
+  var conn = Jdbc.getCloudSqlConnection(DB_URL, DB_USER, DB_PASS);
+  var stmt = conn.createStatement();
+  var rs = stmt.executeQuery(sql);
+  var meta = rs.getMetaData();
+  var cols = meta.getColumnCount();
+  var headers = [];
+  for (var i = 1; i <= cols; i++) headers.push(meta.getColumnName(i));
+  var rows = [];
+  while (rs.next()) {
+    var row = {};
+    for (var i = 1; i <= cols; i++) {
+      row[headers[i-1]] = rs.getString(i);
+    }
+    rows.push(row);
+  }
+  rs.close();
+  stmt.close();
+  conn.close();
+  return { headers: headers, rows: rows };
+}
+
+function dbExplore(tabla) {
+  try {
+    var result = dbQuery('SELECT * FROM ' + tabla + ' LIMIT 5');
+    return { tabla: tabla, headers: result.headers, sample: result.rows };
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+function getRendimientosPolinizacion() {
+  try {
+    var result = dbQuery(
+      'SELECT ep.Ruta as ruta, ' +
+      'COUNT(*) as registros, ' +
+      'SUM(CAST(ep.`Flores Totales` AS SIGNED)) as flores_totales, ' +
+      'SUM(CAST(ep.area_total AS DECIMAL(10,2))) as area_total, ' +
+      'COUNT(DISTINCT ep.id_empleado) as empleados, ' +
+      'AVG(CAST(ep.`Flores Totales` AS SIGNED)) as prom_flores, ' +
+      'AVG(CAST(ep.area_total AS DECIMAL(10,2))) as prom_area ' +
+      'FROM Ejecucion_Polinizacion ep ' +
+      'WHERE ep.Ruta IS NOT NULL AND ep.Ruta != "" ' +
+      'GROUP BY ep.Ruta ' +
+      'ORDER BY ep.Ruta'
+    );
+    return { rendimientos: result.rows };
+  } catch(e) {
+    return { error: e.message };
+  }
 }
