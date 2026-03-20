@@ -3512,7 +3512,7 @@ function renderRendTable() {
         return parts.join(',');
     }
 
-    var thStyle = 'padding:1px 2px;background:#cfe2f3;color:#1a1a1a;font-weight:700;font-size:0.72rem;border:1px solid #b4cde6;text-align:center;white-space:nowrap';
+    var thStyle = 'padding:2px 4px;background:#cfe2f3;color:#1a1a1a;font-weight:700;font-size:0.72rem;border:1px solid #b4cde6;text-align:center;white-space:nowrap';
     var html = '<table style="font-size:0.72rem;border-collapse:collapse">';
     html += '<thead><tr>';
     html += '<th style="' + thStyle + ';text-align:left">Ruta</th>';
@@ -3539,26 +3539,26 @@ function renderRendTable() {
     });
     visibleRows.forEach(function(r, idx) {
         var bgColor = idx % 2 === 0 ? '#d9ead3' : '#ffffff';
-        var tdStyle = 'padding:1px 2px;border:1px solid #d0d0d0;color:#1a1a1a;white-space:nowrap;background:' + bgColor;
+        var tdStyle = 'padding:1px 4px;border:1px solid #d0d0d0;color:#1a1a1a;white-space:nowrap;background:' + bgColor;
         html += '<tr>';
         html += '<td style="' + tdStyle + ';font-weight:700">' + r.ruta + '</td>';
         html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.flores, 0) + '</td>';
-        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.area, 1) + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.area, 2) + '</td>';
         html += '<td style="' + tdStyle + ';text-align:center">' + r.empleados + '</td>';
-        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.promF, 0) + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.promF, 2) + '</td>';
         html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.promA, 2) + '</td>';
         html += '</tr>';
     });
     // Total row
     var totPromF = visibleRows.length > 0 ? (totFlores / visibleRows.length) : 0;
     var totPromA = visibleRows.length > 0 ? (totArea / visibleRows.length) : 0;
-    var tfStyle = 'padding:1px 2px;border:1px solid #d0d0d0;background:#cfe2f3;color:#1a1a1a;font-weight:800;white-space:nowrap';
+    var tfStyle = 'padding:2px 4px;border:1px solid #d0d0d0;background:#cfe2f3;color:#1a1a1a;font-weight:800;white-space:nowrap';
     html += '<tr>';
     html += '<td style="' + tfStyle + '">TOTAL</td>';
     html += '<td style="' + tfStyle + ';text-align:right">' + fmtEs(totFlores, 0) + '</td>';
-    html += '<td style="' + tfStyle + ';text-align:right">' + fmtEs(totArea, 1) + '</td>';
+    html += '<td style="' + tfStyle + ';text-align:right">' + fmtEs(totArea, 2) + '</td>';
     html += '<td style="' + tfStyle + ';text-align:center">' + totEmpleados + '</td>';
-    html += '<td style="' + tfStyle + ';text-align:right">' + fmtEs(totPromF, 0) + '</td>';
+    html += '<td style="' + tfStyle + ';text-align:right">' + fmtEs(totPromF, 2) + '</td>';
     html += '<td style="' + tfStyle + ';text-align:right">' + fmtEs(totPromA, 2) + '</td>';
     html += '</tr>';
     html += '</tbody></table>';
