@@ -304,7 +304,6 @@
         <div class="tabs">
             <button class="tab active" data-tab="mapa">Mapa Geografico</button>
             <button class="tab" data-tab="cierres">Cierre de Lotes</button>
-            <button class="tab" data-tab="lotes">Vista Lotes</button>
             <button class="tab" data-tab="ciclos">Control Ciclos</button>
             <button class="tab" data-tab="cosechado" id="tab-btn-cosechado">Cosechado</button>
             <button class="tab" data-tab="presupuesto">Presupuesto</button>
@@ -2598,13 +2597,17 @@ function renderTonZonaPoli() {
 }
 function renderPresupuesto() {
     var container=document.getElementById('presupuesto-tables');container.textContent='';
+    if (ACTIVE_LABOR === 'polinizacion') {
+        renderPresupuestoPoli(container);
+        return;
+    }
     var dias=['Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'];
     DATA.presupuesto_semanal.forEach(function(sem){
         var card=document.createElement('div');card.className='card';card.style.marginBottom='1.25rem';
         var h2=document.createElement('h2');h2.textContent=sem.titulo;card.appendChild(h2);
         var table=document.createElement('table');table.className='pres-table';
         var thead=document.createElement('thead');var htr=document.createElement('tr');
-        var th0=document.createElement('th');th0.textContent=(ACTIVE_LABOR==='polinizacion'?'Ruta':'Zona');htr.appendChild(th0);
+        var th0=document.createElement('th');th0.textContent='Zona';htr.appendChild(th0);
         dias.forEach(function(d){var th=document.createElement('th');th.className='num';th.textContent=d;htr.appendChild(th);});
         var thT=document.createElement('th');thT.className='num';thT.textContent='Total';thT.style.color='#818cf8';htr.appendChild(thT);
         thead.appendChild(htr);table.appendChild(thead);
@@ -2614,6 +2617,62 @@ function renderPresupuesto() {
         var tdT=document.createElement('td');tdT.className='num';tdT.style.fontWeight='700';tdT.style.color='#818cf8';tdT.textContent=d.total;tr.appendChild(tdT);tbody.appendChild(tr);});
         table.appendChild(tbody);card.appendChild(table);container.appendChild(card);
     });
+}
+function renderPresupuestoPoli(container) {
+    // Group lots by ruta with has and color summary
+    var rutas = {};
+    DATA.lots.forEach(function(l) {
+        var ruta = l.ruta || 'SIN RUTA';
+        if (!rutas[ruta]) rutas[ruta] = { has: 0, lotes: 0, verde: 0, amarillo: 0, naranja: 0, rojo: 0, sinEval: 0 };
+        rutas[ruta].has += (l.has || 0);
+        rutas[ruta].lotes++;
+        if (l.dias_ciclo === null || l.dias_ciclo === undefined) { rutas[ruta].sinEval++; }
+        else {
+            var c = getColor(l.dias_ciclo);
+            if (c === 'verde') rutas[ruta].verde++;
+            else if (c === 'amarillo') rutas[ruta].amarillo++;
+            else if (c === 'naranja') rutas[ruta].naranja++;
+            else if (c === 'rojo') rutas[ruta].rojo++;
+        }
+    });
+    var order = Object.keys(rutas).sort();
+    var card = document.createElement('div'); card.className = 'card'; card.style.marginBottom = '1.25rem';
+    var h2 = document.createElement('h2'); h2.textContent = 'Resumen por Ruta - Polinización'; card.appendChild(h2);
+    var table = document.createElement('table'); table.className = 'pres-table';
+    var thead = document.createElement('thead'); var htr = document.createElement('tr');
+    ['Ruta','Lotes','Has','Verde','Amarillo','Naranja','Rojo','Sin Eval'].forEach(function(h) {
+        var th = document.createElement('th'); th.textContent = h; th.className = 'num';
+        if (h === 'Ruta') th.className = '';
+        htr.appendChild(th);
+    });
+    thead.appendChild(htr); table.appendChild(thead);
+    var tbody = document.createElement('tbody');
+    var totals = { lotes:0, has:0, verde:0, amarillo:0, naranja:0, rojo:0, sinEval:0 };
+    order.forEach(function(r) {
+        var d = rutas[r]; var tr = document.createElement('tr');
+        var td0 = document.createElement('td'); td0.innerHTML = '<strong>' + r + '</strong>'; tr.appendChild(td0);
+        [{v:d.lotes,k:'lotes'},{v:d.has,k:'has'},{v:d.verde,k:'verde'},{v:d.amarillo,k:'amarillo'},{v:d.naranja,k:'naranja'},{v:d.rojo,k:'rojo'},{v:d.sinEval,k:'sinEval'}].forEach(function(item) {
+            var td = document.createElement('td'); td.className = 'num';
+            td.textContent = item.k === 'has' ? item.v.toFixed(1) : item.v;
+            if (item.k === 'verde') td.style.color = 'var(--verde)';
+            if (item.k === 'amarillo') td.style.color = 'var(--amarillo)';
+            if (item.k === 'naranja') td.style.color = 'var(--naranja)';
+            if (item.k === 'rojo') td.style.color = 'var(--rojo)';
+            tr.appendChild(td);
+            totals[item.k] += item.v;
+        });
+        tbody.appendChild(tr);
+    });
+    // Total row
+    var ttr = document.createElement('tr'); ttr.style.fontWeight = '800'; ttr.style.borderTop = '2px solid var(--border)';
+    var tt0 = document.createElement('td'); tt0.textContent = 'TOTAL'; ttr.appendChild(tt0);
+    [{v:totals.lotes},{v:totals.has,fmt:true},{v:totals.verde},{v:totals.amarillo},{v:totals.naranja},{v:totals.rojo},{v:totals.sinEval}].forEach(function(item) {
+        var td = document.createElement('td'); td.className = 'num';
+        td.textContent = item.fmt ? item.v.toFixed(1) : item.v;
+        ttr.appendChild(td);
+    });
+    tbody.appendChild(ttr);
+    table.appendChild(tbody); card.appendChild(table); container.appendChild(card);
 }
 function renderZonas() {
     var isPoli = ACTIVE_LABOR === 'polinizacion';
