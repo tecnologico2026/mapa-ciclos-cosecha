@@ -839,16 +839,20 @@ function applyCierres() {
 
         var state = getLotState(lote);
 
-        if (state.ingresoAbierto) {
-            // Lote abierto: dias_ciclo = hoy - fecha_ingreso
+        // Dias Ciclo SIEMPRE = Hoy - ultimo INGRESO
+        if (state.lastIngreso) {
             var ingresoDate = new Date(state.lastIngreso.fecha + 'T00:00:00');
             var diffDays = Math.round((today - ingresoDate) / 86400000 * 10) / 10;
             lot.dias_ciclo = diffDays;
+            lot._fecha_ingreso = state.lastIngreso.fecha;
+            lot._ingreso_abierto = state.ingresoAbierto;
         } else if (state.lastCierre) {
-            // Lote cerrado: dias_ciclo = hoy - fecha_cierre
+            // Solo tiene cierres legacy (sin ingreso): contar desde cierre
             var cierreDate = new Date(state.lastCierre.fecha + 'T00:00:00');
-            var diffDays = Math.round((today - cierreDate) / 86400000 * 10) / 10;
-            lot.dias_ciclo = diffDays;
+            var diffDays2 = Math.round((today - cierreDate) / 86400000 * 10) / 10;
+            lot.dias_ciclo = diffDays2;
+            lot._fecha_ingreso = null;
+            lot._ingreso_abierto = false;
         }
     });
 }
@@ -1395,17 +1399,19 @@ function buildTooltipBody(dias, lot) {
     var info = [
         ['Zona', lot.zona || '--'],
         ['Dias ciclo', dias !== null && dias !== undefined ? String(dias) : 'Sin evaluar'],
+        ['Ult. Ingreso', lot._fecha_ingreso || '--'],
         ['Hectareas', String(lot.has || '--')],
         ['Siembra', String(lot.siembra || '--')],
         ['Material', lot.material || '--'],
         ['Palmas', String(lot.palmas || '--')],
-        ['Estado', getColor(dias).toUpperCase()]
+        ['Estado', lot._ingreso_abierto ? 'EN PROCESO' : getColor(dias).toUpperCase()]
     ];
     info.forEach(function(r) {
         var row = document.createElement('div'); row.className = 'tt-row';
         var s1 = document.createElement('span'); s1.textContent = r[0];
         var s2 = document.createElement('span'); s2.textContent = r[1];
-        if (r[0]==='Estado') s2.style.color = getColorHex(dias);
+        if (r[0]==='Estado') s2.style.color = (r[1]==='EN PROCESO') ? '#38bdf8' : getColorHex(dias);
+        if (r[0]==='Ult. Ingreso' && r[1] !== '--') s2.style.color = '#22c55e';
         row.appendChild(s1); row.appendChild(s2); body.appendChild(row);
     });
     // Quick action buttons
