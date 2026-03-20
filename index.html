@@ -344,7 +344,7 @@
                 <div id="map-panel-atrasados" class="map-panel" style="top:50px;right:10px;"></div>
                 <div id="map-panel-resumen" class="map-panel" style="bottom:10px;left:10px;"></div>
                 <div id="map-panel-detalle" class="map-panel" style="bottom:10px;right:10px;"></div>
-                <div id="map-panel-rendimientos" class="map-panel" style="top:50px;left:50%;transform:translateX(-50%);display:none;"></div>
+                <div id="map-panel-rendimientos" class="map-panel" style="top:50px;left:280px;">&nbsp;</div>
             </div>
         </div>
 
@@ -3403,13 +3403,15 @@ function renderMapPanels() {
     var pRend = document.getElementById('map-panel-rendimientos');
     if (pRend) {
         if (ACTIVE_LABOR === 'polinizacion') {
-            pRend.style.display = '';
+            pRend.style.visibility = 'visible';
+            pRend.style.opacity = '1';
             if (!pRend._loaded) {
-                pRend.innerHTML = '<div class="map-panel-title">Rendimientos Polinización por Ruta</div><div style="text-align:center;color:#94a3b8;font-size:0.7rem;padding:0.5rem">Cargando...</div>';
+                pRend.innerHTML = '<div class="map-panel-title">Rendimientos Polinización por Ruta</div><div style="text-align:center;color:#94a3b8;font-size:0.7rem;padding:0.5rem">Cargando desde Cloud SQL...</div>';
                 loadRendimientos(pRend);
             }
         } else {
-            pRend.style.display = 'none';
+            pRend.style.visibility = 'hidden';
+            pRend.style.opacity = '0';
         }
     }
 }
