@@ -3513,8 +3513,7 @@ function renderRendTable() {
     }
 
     var thStyle = 'padding:1px 2px;background:#cfe2f3;color:#1a1a1a;font-weight:700;font-size:0.72rem;border:1px solid #b4cde6;text-align:center;white-space:nowrap';
-    var rutaShort = {'CASA ZINC-LIQUIDA':'C.ZINC-LIQ','CASA ZINC-POLVO':'C.ZINC-POL','BANDA 7-8-9':'B.7-8-9','BANDA 5-6':'B.5-6','BANDA G2-3':'B.G2-3','SAN RAFAEL':'S.RAFAEL'};
-    var html = '<table style="font-size:0.72rem;border-collapse:collapse;table-layout:fixed">';
+    var html = '<table style="font-size:0.72rem;border-collapse:collapse">';
     html += '<thead><tr>';
     html += '<th style="' + thStyle + ';text-align:left">Ruta</th>';
     html += '<th style="' + thStyle + '">Flores</th>';
@@ -3542,7 +3541,7 @@ function renderRendTable() {
         var bgColor = idx % 2 === 0 ? '#d9ead3' : '#ffffff';
         var tdStyle = 'padding:1px 2px;border:1px solid #d0d0d0;color:#1a1a1a;white-space:nowrap;background:' + bgColor;
         html += '<tr>';
-        html += '<td style="' + tdStyle + ';font-weight:700">' + (rutaShort[r.ruta] || r.ruta) + '</td>';
+        html += '<td style="' + tdStyle + ';font-weight:700">' + r.ruta + '</td>';
         html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.flores, 0) + '</td>';
         html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.area, 1) + '</td>';
         html += '<td style="' + tdStyle + ';text-align:center">' + r.empleados + '</td>';
