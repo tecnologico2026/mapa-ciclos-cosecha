@@ -344,7 +344,7 @@
                 <div id="map-panel-atrasados" class="map-panel" style="top:50px;right:10px;"></div>
                 <div id="map-panel-resumen" class="map-panel" style="bottom:10px;left:10px;"></div>
                 <div id="map-panel-detalle" class="map-panel" style="bottom:10px;right:10px;"></div>
-                <div id="map-panel-rendimientos" class="map-panel" style="top:50px;left:280px;padding:0;min-width:380px;background:transparent;border:none;backdrop-filter:none;max-height:none;overflow:visible;">&nbsp;</div>
+                <div id="map-panel-rendimientos" class="map-panel" style="top:50px;left:280px;padding:0;background:transparent;border:none;backdrop-filter:none;max-height:none;overflow:visible;">&nbsp;</div>
             </div>
         </div>
 
@@ -3512,15 +3512,15 @@ function renderRendTable() {
         return parts.join(',');
     }
 
-    var thStyle = 'padding:3px 6px;background:#cfe2f3;color:#1a1a1a;font-weight:600;font-size:0.62rem;border:1px solid #b4cde6;text-align:center';
-    var html = '<table style="font-size:0.62rem;border-collapse:collapse;width:100%">';
+    var thStyle = 'padding:2px 4px;background:#cfe2f3;color:#1a1a1a;font-weight:700;font-size:0.72rem;border:1px solid #b4cde6;text-align:center;white-space:nowrap';
+    var html = '<table style="font-size:0.72rem;border-collapse:collapse">';
     html += '<thead><tr>';
     html += '<th style="' + thStyle + ';text-align:left">Ruta</th>';
-    html += '<th style="' + thStyle + '">Flores Totales</th>';
-    html += '<th style="' + thStyle + '">\u00c1rea Total</th>';
-    html += '<th style="' + thStyle + '">Empleados</th>';
-    html += '<th style="' + thStyle + '">Prom. Flores</th>';
-    html += '<th style="' + thStyle + '">Prom.<br>Hect\u00e1reas</th>';
+    html += '<th style="' + thStyle + '">Flores</th>';
+    html += '<th style="' + thStyle + '">Has</th>';
+    html += '<th style="' + thStyle + '">Emp</th>';
+    html += '<th style="' + thStyle + '">P.Flor</th>';
+    html += '<th style="' + thStyle + '">P.Has</th>';
     html += '</tr></thead><tbody>';
     var totFlores = 0, totArea = 0, totEmpleados = 0;
     var visibleRows = [];
@@ -3539,7 +3539,7 @@ function renderRendTable() {
     });
     visibleRows.forEach(function(r, idx) {
         var bgColor = idx % 2 === 0 ? '#d9ead3' : '#ffffff';
-        var tdStyle = 'padding:2px 6px;border:1px solid #d0d0d0;color:#1a1a1a;background:' + bgColor;
+        var tdStyle = 'padding:1px 4px;border:1px solid #d0d0d0;color:#1a1a1a;white-space:nowrap;background:' + bgColor;
         html += '<tr>';
         html += '<td style="' + tdStyle + ';font-weight:700">' + r.ruta + '</td>';
         html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.flores, 0) + '</td>';
@@ -3552,7 +3552,7 @@ function renderRendTable() {
     // Total row
     var totPromF = visibleRows.length > 0 ? (totFlores / visibleRows.length) : 0;
     var totPromA = visibleRows.length > 0 ? (totArea / visibleRows.length) : 0;
-    var tfStyle = 'padding:3px 6px;border:1px solid #d0d0d0;background:#cfe2f3;color:#1a1a1a;font-weight:800';
+    var tfStyle = 'padding:2px 4px;border:1px solid #d0d0d0;background:#cfe2f3;color:#1a1a1a;font-weight:800;white-space:nowrap';
     html += '<tr>';
     html += '<td style="' + tfStyle + '">TOTAL</td>';
     html += '<td style="' + tfStyle + ';text-align:right">' + fmtEs(totFlores, 0) + '</td>';
