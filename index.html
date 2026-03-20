@@ -2258,7 +2258,7 @@ function renderChartZonaCiclos() {
     if (hPasados) hPasados.textContent = isPoli ? 'Lotes Pasados por Ruta' : 'Lotes Pasados por Zona';
 
     var labor = CYCLES_DB[ACTIVE_LABOR];
-    var colores = labor ? labor.rangos : {verde:[0,14],amarillo:[14.1,17],naranja:[17.1,20],rojo:[20.1,999]};
+    var colores = labor ? labor.colores : {verde:[0,14],amarillo:[14.1,17],naranja:[17.1,20],rojo:[20.1,999]};
     var rn = [colores.verde[0]+'-'+colores.verde[1]+'d', colores.amarillo[0]+'-'+colores.amarillo[1]+'d', colores.naranja[0]+'-'+colores.naranja[1]+'d', '+'+colores.rojo[0]+'d'];
     var rc = ['#22c55e','#eab308','#f97316','#ef4444'];
     var rl = [[colores.verde[0],colores.verde[1]],[colores.amarillo[0],colores.amarillo[1]],[colores.naranja[0],colores.naranja[1]],[colores.rojo[0],999]];
@@ -2419,7 +2419,7 @@ function renderControlSiembra() {
     zonGrid.textContent = '';
     var isPoli = ACTIVE_LABOR === 'polinizacion';
     var labor = CYCLES_DB[ACTIVE_LABOR];
-    var metaAtrasado = labor ? labor.rangos.rojo[0] : 14;
+    var metaAtrasado = labor ? labor.colores.rojo[0] : 14;
     var groupList;
     if (isPoli) {
         var rutaSet = {};
