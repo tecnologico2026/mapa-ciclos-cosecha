@@ -437,11 +437,11 @@
             <div class="grid">
                 <div class="card"><h2>Distribucion por Rango</h2><div class="chart-container"><canvas id="chart-ciclos"></canvas></div></div>
                 <div class="card"><h2>Resumen General</h2><table id="table-control"><thead><tr><th>Rango</th><th>Lotes</th><th>Has</th><th>%</th></tr></thead><tbody></tbody></table></div>
-                <div class="card full-width"><h2>Por Zona</h2><div class="chart-container" style="height:320px"><canvas id="chart-zona-ciclos"></canvas></div></div>
+                <div class="card full-width"><h2 id="h-ciclos-grupo">Por Zona</h2><div class="chart-container" style="height:320px"><canvas id="chart-zona-ciclos"></canvas></div></div>
             </div>
             <h2 style="margin:1.5rem 0 1rem;font-size:1.1rem;color:var(--text)">Control por Siembra</h2>
             <div id="control-siembra-grid" class="control-siembra-grid"></div>
-            <h2 style="margin:1.5rem 0 1rem;font-size:1.1rem;color:var(--text)">Lotes Pasados por Zona</h2>
+            <h2 id="h-ciclos-pasados" style="margin:1.5rem 0 1rem;font-size:1.1rem;color:var(--text)">Lotes Pasados por Zona</h2>
             <div id="control-zona-pasados" class="control-siembra-grid"></div>
         </div>
 
@@ -2251,12 +2251,32 @@ function renderChartCiclos() {
     new Chart(document.getElementById('chart-ciclos'),{type:'doughnut',data:{labels:items.map(function(c){return c.rango;}),datasets:[{data:items.map(function(c){return c.has;}),backgroundColor:['#22c55e','#eab308','#f97316','#ef4444'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',padding:12}}}}});
 }
 function renderChartZonaCiclos() {
-    var zones = ['ZONA A','ZONA B','ZONA C','ADULTA'];
-    var rn = ['0-4d','4-5d','5-7d','+7d'];
+    var isPoli = ACTIVE_LABOR === 'polinizacion';
+    var hGrupo = document.getElementById('h-ciclos-grupo');
+    if (hGrupo) hGrupo.textContent = isPoli ? 'Por Ruta' : 'Por Zona';
+    var hPasados = document.getElementById('h-ciclos-pasados');
+    if (hPasados) hPasados.textContent = isPoli ? 'Lotes Pasados por Ruta' : 'Lotes Pasados por Zona';
+
+    var labor = CYCLES_DB[ACTIVE_LABOR];
+    var colores = labor ? labor.rangos : {verde:[0,14],amarillo:[14.1,17],naranja:[17.1,20],rojo:[20.1,999]};
+    var rn = [colores.verde[0]+'-'+colores.verde[1]+'d', colores.amarillo[0]+'-'+colores.amarillo[1]+'d', colores.naranja[0]+'-'+colores.naranja[1]+'d', '+'+colores.rojo[0]+'d'];
     var rc = ['#22c55e','#eab308','#f97316','#ef4444'];
-    var rl = [[0,14],[14.1,17],[17.1,20],[20.1,999]];
-    var ds = rn.map(function(n,i){return{label:n,data:zones.map(function(z){return DATA.lots.filter(function(l){return l.zona===z&&l.dias_ciclo!==null&&l.dias_ciclo>=rl[i][0]&&l.dias_ciclo<=rl[i][1];}).length;}),backgroundColor:rc[i]};});
-    new Chart(document.getElementById('chart-zona-ciclos'),{type:'bar',data:{labels:zones,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8'}}},scales:{x:{stacked:true,ticks:{color:'#94a3b8'},grid:{color:'rgba(255,255,255,0.05)'}},y:{stacked:true,ticks:{color:'#94a3b8'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
+    var rl = [[colores.verde[0],colores.verde[1]],[colores.amarillo[0],colores.amarillo[1]],[colores.naranja[0],colores.naranja[1]],[colores.rojo[0],999]];
+
+    var groups;
+    if (isPoli) {
+        var rutaSet = {};
+        DATA.lots.forEach(function(l) { if (l.ruta) rutaSet[l.ruta] = true; });
+        groups = Object.keys(rutaSet).sort();
+    } else {
+        groups = ['ZONA A','ZONA B','ZONA C','ADULTA'];
+    }
+    var groupKey = isPoli ? 'ruta' : 'zona';
+
+    var ds = rn.map(function(n,i){return{label:n,data:groups.map(function(g){return DATA.lots.filter(function(l){return l[groupKey]===g&&l.dias_ciclo!==null&&l.dias_ciclo>=rl[i][0]&&l.dias_ciclo<=rl[i][1];}).length;}),backgroundColor:rc[i]};});
+    var canvas = document.getElementById('chart-zona-ciclos');
+    if (canvas._chart) canvas._chart.destroy();
+    canvas._chart = new Chart(canvas,{type:'bar',data:{labels:groups,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8'}}},scales:{x:{stacked:true,ticks:{color:'#94a3b8',font:{size:isPoli?9:12}},grid:{color:'rgba(255,255,255,0.05)'}},y:{stacked:true,ticks:{color:'#94a3b8'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
 }
 function renderControlSiembra() {
     // Group definitions matching Excel "CICLOS COSECHA" sheet
@@ -2394,14 +2414,25 @@ function renderControlSiembra() {
         grid.appendChild(card);
     });
 
-    // Lotes pasados por zona
+    // Lotes pasados por zona/ruta
     var zonGrid = document.getElementById('control-zona-pasados');
     zonGrid.textContent = '';
-    var zonas = ['ADULTA', 'ZONA A', 'ZONA B', 'ZONA C'];
-    zonas.forEach(function(z) {
-        var zLots = DATA.lots.filter(function(l) { return l.zona === z; });
+    var isPoli = ACTIVE_LABOR === 'polinizacion';
+    var labor = CYCLES_DB[ACTIVE_LABOR];
+    var metaAtrasado = labor ? labor.rangos.rojo[0] : 14;
+    var groupList;
+    if (isPoli) {
+        var rutaSet = {};
+        DATA.lots.forEach(function(l) { if (l.ruta) rutaSet[l.ruta] = true; });
+        groupList = Object.keys(rutaSet).sort();
+    } else {
+        groupList = ['ADULTA', 'ZONA A', 'ZONA B', 'ZONA C'];
+    }
+    var groupKey = isPoli ? 'ruta' : 'zona';
+    groupList.forEach(function(z) {
+        var zLots = DATA.lots.filter(function(l) { return l[groupKey] === z; });
         var pasados = zLots.filter(function(l) {
-            return l.dias_ciclo !== null && l.dias_ciclo < 49000 && l.dias_ciclo > 14;
+            return l.dias_ciclo !== null && l.dias_ciclo < 49000 && l.dias_ciclo > metaAtrasado;
         });
         var total = zLots.length;
         var pct = total > 0 ? Math.round(pasados.length / total * 100) : 0;
