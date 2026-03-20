@@ -3504,7 +3504,15 @@ function renderRendFilters(panel) {
 function renderRendTable() {
     var tableArea = document.getElementById('rend-table-area');
     if (!tableArea || !_rendData) return;
-    var thStyle = 'padding:5px 10px;background:#b6d7a8;color:#274e13;font-weight:700;font-size:0.78rem;border:1px solid #93c47d;text-align:center';
+    function fmtNum(n) { return n.toLocaleString('es-CO'); }
+    function fmtDec(n, d) { return n.toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, '.').replace('.', '_TMP_').replace(/\./g, '.').replace('_TMP_', ','); }
+    function fmtEs(n, decimals) {
+        var parts = n.toFixed(decimals).split('.');
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        return parts.join(',');
+    }
+
+    var thStyle = 'padding:5px 10px;background:#cfe2f3;color:#1a1a1a;font-weight:600;font-size:0.78rem;border:1px solid #b4cde6;text-align:center';
     var html = '<table style="font-size:0.8rem;border-collapse:collapse;width:100%">';
     html += '<thead><tr>';
     html += '<th style="' + thStyle + ';text-align:left">Ruta</th>';
@@ -3512,9 +3520,9 @@ function renderRendTable() {
     html += '<th style="' + thStyle + '">\u00c1rea Total</th>';
     html += '<th style="' + thStyle + '">Empleados</th>';
     html += '<th style="' + thStyle + '">Prom. Flores</th>';
-    html += '<th style="' + thStyle + '">Prom. Hect\u00e1reas</th>';
+    html += '<th style="' + thStyle + '">Prom.<br>Hect\u00e1reas</th>';
     html += '</tr></thead><tbody>';
-    var totFlores = 0, totArea = 0, totEmpleados = 0, rowIdx = 0;
+    var totFlores = 0, totArea = 0, totEmpleados = 0;
     var visibleRows = [];
     _rendData.forEach(function(r) {
         var ruta = r.Ruta || r.ruta || '';
@@ -3531,28 +3539,27 @@ function renderRendTable() {
     });
     visibleRows.forEach(function(r, idx) {
         var bgColor = idx % 2 === 0 ? '#d9ead3' : '#ffffff';
-        var txtColor = '#1a1a1a';
-        var tdStyle = 'padding:4px 10px;border:1px solid #c9dcc0;color:' + txtColor + ';background:' + bgColor;
+        var tdStyle = 'padding:4px 10px;border:1px solid #d0d0d0;color:#1a1a1a;background:' + bgColor;
         html += '<tr>';
         html += '<td style="' + tdStyle + ';font-weight:700">' + r.ruta + '</td>';
-        html += '<td style="' + tdStyle + ';text-align:right">' + r.flores.toLocaleString() + '</td>';
-        html += '<td style="' + tdStyle + ';text-align:right">' + r.area.toFixed(2) + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.flores, 0) + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.area, 2) + '</td>';
         html += '<td style="' + tdStyle + ';text-align:center">' + r.empleados + '</td>';
-        html += '<td style="' + tdStyle + ';text-align:right">' + r.promF.toFixed(2) + '</td>';
-        html += '<td style="' + tdStyle + ';text-align:right">' + r.promA.toFixed(2) + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.promF, 2) + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:right">' + fmtEs(r.promA, 2) + '</td>';
         html += '</tr>';
     });
     // Total row
     var totPromF = visibleRows.length > 0 ? (totFlores / visibleRows.length) : 0;
     var totPromA = visibleRows.length > 0 ? (totArea / visibleRows.length) : 0;
-    var tfStyle = 'padding:5px 10px;border:1px solid #93c47d;background:#b6d7a8;color:#274e13;font-weight:800';
+    var tfStyle = 'padding:5px 10px;border:1px solid #d0d0d0;background:#cfe2f3;color:#1a1a1a;font-weight:800';
     html += '<tr>';
     html += '<td style="' + tfStyle + '">TOTAL</td>';
-    html += '<td style="' + tfStyle + ';text-align:right">' + totFlores.toLocaleString() + '</td>';
-    html += '<td style="' + tfStyle + ';text-align:right">' + totArea.toFixed(2) + '</td>';
+    html += '<td style="' + tfStyle + ';text-align:right">' + fmtEs(totFlores, 0) + '</td>';
+    html += '<td style="' + tfStyle + ';text-align:right">' + fmtEs(totArea, 2) + '</td>';
     html += '<td style="' + tfStyle + ';text-align:center">' + totEmpleados + '</td>';
-    html += '<td style="' + tfStyle + ';text-align:right">' + totPromF.toFixed(2) + '</td>';
-    html += '<td style="' + tfStyle + ';text-align:right">' + totPromA.toFixed(2) + '</td>';
+    html += '<td style="' + tfStyle + ';text-align:right">' + fmtEs(totPromF, 2) + '</td>';
+    html += '<td style="' + tfStyle + ';text-align:right">' + fmtEs(totPromA, 2) + '</td>';
     html += '</tr>';
     html += '</tbody></table>';
     tableArea.innerHTML = html;
