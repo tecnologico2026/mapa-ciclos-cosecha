@@ -640,8 +640,11 @@ function applyAPIData(laborKey, apiData) {
                     if (!exists) CIERRES.push(c);
                 });
                 saveCierres();
-                applyCierres();
             }
+            // Always recalculate from cierres and update ORIG_DIAS
+            applyCierres();
+            ORIG_DIAS = {};
+            DATA.lots.forEach(function(l) { ORIG_DIAS[l.lote] = l.dias_ciclo; });
             // Refresh UI
             updateKPIs();
             recolorMap();
@@ -653,6 +656,8 @@ function applyAPIData(laborKey, apiData) {
         .catch(function() {
             // Just refresh with local cierres
             applyCierres();
+            ORIG_DIAS = {};
+            DATA.lots.forEach(function(l) { ORIG_DIAS[l.lote] = l.dias_ciclo; });
             updateKPIs();
             recolorMap();
             renderLotes();
