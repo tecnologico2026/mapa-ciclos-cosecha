@@ -4529,18 +4529,31 @@ function initCarga() {
     }
 }
 
+// Merge de rutas: rutas que se combinan bajo un solo nombre
+var RUTAS_MERGE = {
+    '2017': '2017-CAMBULOS',
+    'CAMBULO': '2017-CAMBULOS',
+    'CAMBULOS': '2017-CAMBULOS'
+};
+
+function mergeRuta(ruta) {
+    return RUTAS_MERGE[ruta] || RUTAS_MERGE[ruta.toUpperCase()] || ruta;
+}
+
 function loadCargaOperarios() {
     var desde = document.getElementById('carga-desde').value;
     var hasta = document.getElementById('carga-hasta').value;
-    var ruta = document.getElementById('carga-ruta-filter').value;
+    var rutaSel = document.getElementById('carga-ruta-filter').value;
     var container = document.getElementById('carga-table-container');
 
     container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:2rem;font-size:0.85rem">Cargando desde Cloud SQL...</div>';
 
+    // If merged ruta selected, don't filter by ruta on server (fetch all, filter client-side)
+    var isMerged = rutaSel && Object.values(RUTAS_MERGE).indexOf(rutaSel) !== -1;
     var url = API_URL + '?action=carga_operarios';
     if (desde) url += '&desde=' + desde;
     if (hasta) url += '&hasta=' + hasta;
-    if (ruta) url += '&ruta=' + encodeURIComponent(ruta);
+    if (rutaSel && !isMerged) url += '&ruta=' + encodeURIComponent(rutaSel);
 
     fetch(url)
         .then(function(r) { return r.json(); })
@@ -4550,22 +4563,37 @@ function loadCargaOperarios() {
                 return;
             }
 
-            // Populate rutas filter
-            if (data.rutas && data.rutas.length > 0) {
+            // Merge rutas in data
+            if (data.flores) data.flores.forEach(function(r) { r.ruta = mergeRuta(r.ruta || ''); });
+            if (data.areas) data.areas.forEach(function(r) { r.Ruta = mergeRuta(r.Ruta || ''); });
+
+            // Merge rutas in filter list
+            if (data.rutas) {
+                var rutasSet = {};
+                data.rutas.forEach(function(r) { rutasSet[mergeRuta(r)] = true; });
+                var rutasMerged = Object.keys(rutasSet).sort();
                 var sel = document.getElementById('carga-ruta-filter');
                 var currentVal = sel.value;
                 sel.innerHTML = '<option value="">Todas</option>';
-                data.rutas.forEach(function(r) {
+                rutasMerged.forEach(function(r) {
                     sel.innerHTML += '<option value="' + r + '"' + (r === currentVal ? ' selected' : '') + '>' + r + '</option>';
                 });
             }
 
-            if ((!data.flores || data.flores.length === 0) && (!data.areas || data.areas.length === 0)) {
+            // Filter by merged ruta if needed
+            var flores = data.flores || [];
+            var areas = data.areas || [];
+            if (isMerged) {
+                flores = flores.filter(function(r) { return r.ruta === rutaSel; });
+                areas = areas.filter(function(r) { return r.Ruta === rutaSel; });
+            }
+
+            if (flores.length === 0 && areas.length === 0) {
                 container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:2rem;font-size:0.85rem">Sin datos para el rango seleccionado</div>';
                 return;
             }
 
-            renderCargaTable(data.flores || [], data.areas || [], container);
+            renderCargaTable(flores, areas, container);
         })
         .catch(function(err) {
             container.innerHTML = '<div style="color:#ef4444;padding:1rem">Error: ' + err.message + '</div>';
