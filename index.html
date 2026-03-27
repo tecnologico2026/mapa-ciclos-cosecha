@@ -699,12 +699,14 @@ function getLotState(lote) {
     registros.sort(function(a, b) { return b.fecha.localeCompare(a.fecha) || b.tipo.localeCompare(a.tipo); });
     var lastIngreso = null;
     var lastCierre = null;
+    var lastApertura = null;
     for (var i = 0; i < registros.length; i++) {
         if (!lastIngreso && registros[i].tipo === 'INGRESO') lastIngreso = registros[i];
         if (!lastCierre && registros[i].tipo === 'CIERRE') lastCierre = registros[i];
+        if (!lastApertura && registros[i].tipo === 'APERTURA') lastApertura = registros[i];
     }
     var ingresoAbierto = lastIngreso && (!lastCierre || lastIngreso.fecha > lastCierre.fecha);
-    return { lastIngreso: lastIngreso, lastCierre: lastCierre, ingresoAbierto: ingresoAbierto };
+    return { lastIngreso: lastIngreso, lastCierre: lastCierre, lastApertura: lastApertura, ingresoAbierto: ingresoAbierto };
 }
 
 function applyLaborData(laborKey) {
@@ -879,20 +881,23 @@ function applyCierres() {
 
         var state = getLotState(lote);
 
-        // Dias Ciclo = Hoy - ultimo CIERRE
-        if (state.lastCierre) {
-            var cierreDate = new Date(state.lastCierre.fecha + 'T00:00:00');
-            var diffDays = Math.round((today - cierreDate) / 86400000 * 10) / 10;
-            lot.dias_ciclo = diffDays;
-            lot._fecha_ingreso = state.lastIngreso ? state.lastIngreso.fecha : null;
-            lot._ingreso_abierto = state.ingresoAbierto;
-        } else if (state.lastIngreso) {
-            // Solo tiene ingreso sin cierre: contar desde ingreso
+        // Dias Ciclo = Hoy - ultimo INGRESO (ignora APERTURA)
+        if (state.lastIngreso) {
             var ingresoDate = new Date(state.lastIngreso.fecha + 'T00:00:00');
-            var diffDays2 = Math.round((today - ingresoDate) / 86400000 * 10) / 10;
-            lot.dias_ciclo = diffDays2;
+            var diffDays = Math.round((today - ingresoDate) / 86400000 * 10) / 10;
+            lot.dias_ciclo = diffDays;
             lot._fecha_ingreso = state.lastIngreso.fecha;
-            lot._ingreso_abierto = true;
+            lot._ingreso_abierto = state.ingresoAbierto;
+            lot._tiene_apertura = state.lastApertura ? true : false;
+        }
+
+        if (!state.lastIngreso && state.lastCierre) {
+            // Solo tiene cierres legacy (sin ingreso): contar desde cierre
+            var cierreDate = new Date(state.lastCierre.fecha + 'T00:00:00');
+            var diffDays2 = Math.round((today - cierreDate) / 86400000 * 10) / 10;
+            lot.dias_ciclo = diffDays2;
+            lot._fecha_ingreso = null;
+            lot._ingreso_abierto = false;
         }
     });
 }
