@@ -879,22 +879,20 @@ function applyCierres() {
 
         var state = getLotState(lote);
 
-        // Dias Ciclo SIEMPRE = Hoy - ultimo INGRESO
-        if (state.lastIngreso) {
-            var ingresoDate = new Date(state.lastIngreso.fecha + 'T00:00:00');
-            var diffDays = Math.round((today - ingresoDate) / 86400000 * 10) / 10;
-            lot.dias_ciclo = diffDays;
-            lot._fecha_ingreso = state.lastIngreso.fecha;
-            lot._ingreso_abierto = state.ingresoAbierto;
-        }
-
-        if (!state.lastIngreso && state.lastCierre) {
-            // Solo tiene cierres legacy (sin ingreso): contar desde cierre
+        // Dias Ciclo = Hoy - ultimo CIERRE
+        if (state.lastCierre) {
             var cierreDate = new Date(state.lastCierre.fecha + 'T00:00:00');
-            var diffDays2 = Math.round((today - cierreDate) / 86400000 * 10) / 10;
+            var diffDays = Math.round((today - cierreDate) / 86400000 * 10) / 10;
+            lot.dias_ciclo = diffDays;
+            lot._fecha_ingreso = state.lastIngreso ? state.lastIngreso.fecha : null;
+            lot._ingreso_abierto = state.ingresoAbierto;
+        } else if (state.lastIngreso) {
+            // Solo tiene ingreso sin cierre: contar desde ingreso
+            var ingresoDate = new Date(state.lastIngreso.fecha + 'T00:00:00');
+            var diffDays2 = Math.round((today - ingresoDate) / 86400000 * 10) / 10;
             lot.dias_ciclo = diffDays2;
-            lot._fecha_ingreso = null;
-            lot._ingreso_abierto = false;
+            lot._fecha_ingreso = state.lastIngreso.fecha;
+            lot._ingreso_abierto = true;
         }
     });
 }

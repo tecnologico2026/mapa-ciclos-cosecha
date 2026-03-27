@@ -221,9 +221,10 @@ function addRegistro(lote, tipo, fecha, supervisor, labor) {
 
     for (var i = 1; i < data.length; i++) {
       if (data[i][0].toString() === lote) {
-        // dias_ciclo = today - fecha_ingreso (for INGRESO)
-        // dias_ciclo = today - fecha_cierre (for CIERRE, days since last close)
-        laborSheet.getRange(i + 1, 3).setValue(diffDays);
+        // dias_ciclo = today - fecha_cierre (only update on CIERRE)
+        if (tipo === 'CIERRE') {
+          laborSheet.getRange(i + 1, 3).setValue(diffDays);
+        }
         break;
       }
     }
