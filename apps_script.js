@@ -1,5 +1,5 @@
-// ===== MAPA CICLOS - GOOGLE APPS SCRIPT API =====
-// Hojas: POLINIZACION, COSECHA, CIERRES
+// ===== MAPA POLINIZACION - GOOGLE APPS SCRIPT API =====
+// Hojas: POLINIZACION, CIERRES
 // CIERRES columns: LOTE | TIPO | FECHA | SUPERVISOR | LABOR | REGISTRADO
 
 function doGet(e) {
@@ -8,14 +8,11 @@ function doGet(e) {
 
   if (action === 'polinizacion') {
     result = getLaborData('POLINIZACION');
-  } else if (action === 'cosecha') {
-    result = getLaborData('COSECHA');
   } else if (action === 'cierres') {
     result = getCierres();
   } else if (action === 'all') {
     result = {
       polinizacion: getLaborData('POLINIZACION'),
-      cosecha: getLaborData('COSECHA'),
       cierres: getCierres()
     };
   } else if (action === 'registro') {
@@ -46,9 +43,31 @@ function doGet(e) {
     var desde = e.parameter.desde || '';
     var hasta = e.parameter.hasta || '';
     result = getRendimientosPolinizacion(desde, hasta);
+  } else if (action === 'rendimientos_detalle') {
+    var fecha = e.parameter.fecha || '';
+    result = getRendimientosDetalle(fecha);
   } else if (action === 'db_explore') {
     var tabla = e.parameter.tabla || 'Ejecucion_Polinizacion';
     result = dbExplore(tabla);
+  } else if (action === 'consumo_historial') {
+    var desde = e.parameter.desde || '';
+    var hasta = e.parameter.hasta || '';
+    var ruta = e.parameter.ruta || '';
+    result = getConsumoHistorial(desde, hasta, ruta);
+  } else if (action === 'consumo_por_ruta') {
+    var desde = e.parameter.desde || '';
+    var hasta = e.parameter.hasta || '';
+    result = getConsumoPorRuta(desde, hasta);
+  } else if (action === 'consumo_detalle') {
+    var fecha = e.parameter.fecha || '';
+    result = getConsumoDetalle(fecha);
+  } else if (action === 'carga_operarios') {
+    var desde = e.parameter.desde || '';
+    var hasta = e.parameter.hasta || '';
+    var ruta = e.parameter.ruta || '';
+    result = getCargaOperarios(desde, hasta, ruta);
+  } else if (action === 'list_tables') {
+    result = dbQuery("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mty-palmas-db'");
   }
 
   return ContentService
@@ -271,8 +290,35 @@ function dbQuery(sql) {
 
 function dbExplore(tabla) {
   try {
+    // Whitelist allowed table names to prevent SQL injection
+    var allowed = ['Ejecucion_Polinizacion', 'Ejecucion_Cosecha', 'Ejecucion_Plateo', 'Ejecucion_Poda', 'Consumo_Hormona', 'Carga_CT', 'Empleado'];
+    if (allowed.indexOf(tabla) === -1) {
+      return { error: 'Tabla no permitida: ' + tabla };
+    }
     var result = dbQuery('SELECT * FROM ' + tabla + ' LIMIT 5');
     return { tabla: tabla, headers: result.headers, sample: result.rows };
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+function getRendimientosDetalle(fecha) {
+  try {
+    var dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!fecha || !dateRegex.test(fecha)) {
+      return { error: 'Fecha requerida en formato yyyy-MM-dd' };
+    }
+    var result = dbQuery(
+      'SELECT ep.Ruta as ruta, ep.Lote as lote, ep.id_empleado, ' +
+      'ep.`Flores Totales` as flores_totales, ' +
+      'CAST(ep.area_total AS DECIMAL(10,2)) as area_total, ' +
+      'ep.fecha ' +
+      'FROM Ejecucion_Polinizacion ep ' +
+      'WHERE ep.fecha = "' + fecha + '" ' +
+      'AND ep.Ruta IS NOT NULL AND ep.Ruta != "" ' +
+      'ORDER BY ep.Ruta, ep.Lote'
+    );
+    return { detalle: result.rows, fecha: fecha };
   } catch(e) {
     return { error: e.message };
   }
@@ -281,8 +327,10 @@ function dbExplore(tabla) {
 function getRendimientosPolinizacion(desde, hasta) {
   try {
     var where = 'WHERE ep.Ruta IS NOT NULL AND ep.Ruta != ""';
-    if (desde) where += ' AND ep.fecha >= "' + desde + '"';
-    if (hasta) where += ' AND ep.fecha <= "' + hasta + '"';
+    // Sanitize date parameters - only allow yyyy-MM-dd format
+    var dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (desde && dateRegex.test(desde)) where += ' AND ep.fecha >= "' + desde + '"';
+    if (hasta && dateRegex.test(hasta)) where += ' AND ep.fecha <= "' + hasta + '"';
     var result = dbQuery(
       'SELECT ep.Ruta as ruta, ' +
       'COUNT(*) as registros, ' +
@@ -297,6 +345,142 @@ function getRendimientosPolinizacion(desde, hasta) {
       'ORDER BY ep.Ruta'
     );
     return { rendimientos: result.rows };
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+// ===== CONSUMO DE INSUMOS =====
+
+function getConsumoHistorial(desde, hasta, ruta) {
+  try {
+    var dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    var where = 'WHERE 1=1';
+    if (desde && dateRegex.test(desde)) where += ' AND fecha >= "' + desde + '"';
+    if (hasta && dateRegex.test(hasta)) where += ' AND fecha <= "' + hasta + '"';
+    if (ruta) {
+      var cleanRuta = ruta.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ %._-]/g, '');
+      where += ' AND ruta = "' + cleanRuta + '"';
+    }
+    var result = dbQuery(
+      'SELECT fecha, ruta, ' +
+      'SUM(hormona_entregada) as entregada, ' +
+      'SUM(hormona_devuelta) as devuelta, ' +
+      'SUM(hormona_entregada - hormona_devuelta) as consumo_neto, ' +
+      'SUM(flores_totales) as flores_totales, ' +
+      'COUNT(*) as registros ' +
+      'FROM Consumo_Hormona ' +
+      where + ' ' +
+      'GROUP BY fecha, ruta ' +
+      'ORDER BY fecha DESC, ruta'
+    );
+    var rutas = dbQuery('SELECT DISTINCT ruta FROM Consumo_Hormona WHERE ruta IS NOT NULL AND ruta != "" ORDER BY ruta');
+    return { historial: result.rows, rutas: rutas.rows.map(function(r) { return r.ruta; }) };
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+function getConsumoPorRuta(desde, hasta) {
+  try {
+    var dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    var where = 'WHERE 1=1';
+    if (desde && dateRegex.test(desde)) where += ' AND fecha >= "' + desde + '"';
+    if (hasta && dateRegex.test(hasta)) where += ' AND fecha <= "' + hasta + '"';
+    var result = dbQuery(
+      'SELECT ruta, ' +
+      'SUM(hormona_entregada) as entregado, ' +
+      'SUM(hormona_devuelta) as devuelto, ' +
+      'SUM(hormona_entregada - hormona_devuelta) as gastado, ' +
+      'SUM(flores_totales) as flores_totales, ' +
+      'ROUND(SUM(hormona_devuelta) / NULLIF(SUM(hormona_entregada), 0) * 100, 1) as pct_devolucion, ' +
+      'COUNT(DISTINCT fecha) as dias, ' +
+      'COUNT(DISTINCT id_empleado) as empleados ' +
+      'FROM Consumo_Hormona ' +
+      where + ' ' +
+      'GROUP BY ruta ' +
+      'ORDER BY ruta'
+    );
+    return { consumo_ruta: result.rows };
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+function getConsumoDetalle(fecha) {
+  try {
+    var dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!fecha || !dateRegex.test(fecha)) {
+      return { error: 'Fecha requerida en formato yyyy-MM-dd' };
+    }
+    var result = dbQuery(
+      'SELECT ruta, id_empleado, auxiliar_responsable, ' +
+      'hormona_entregada, hormona_devuelta, ' +
+      '(hormona_entregada - hormona_devuelta) as consumo_neto, ' +
+      'flores_totales, PROMEDIO_HORMONA ' +
+      'FROM Consumo_Hormona ' +
+      'WHERE fecha = "' + fecha + '" ' +
+      'ORDER BY ruta, id_empleado'
+    );
+    return { detalle: result.rows, fecha: fecha };
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+// ===== CARGA OPERARIOS (desde Carga_CT) =====
+
+function getCargaOperarios(desde, hasta, ruta) {
+  try {
+    var dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    var whereCT = 'WHERE 1=1';
+    var whereEP = 'WHERE ep.Ruta IS NOT NULL AND ep.Ruta != ""';
+    if (desde && dateRegex.test(desde)) {
+      whereCT += ' AND c.fecha >= "' + desde + '"';
+      whereEP += ' AND ep.fecha >= "' + desde + '"';
+    }
+    if (hasta && dateRegex.test(hasta)) {
+      whereCT += ' AND c.fecha <= "' + hasta + '"';
+      whereEP += ' AND ep.fecha <= "' + hasta + '"';
+    }
+    if (ruta) {
+      var cleanRuta = ruta.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ %._-]/g, '');
+      whereCT += ' AND c.ruta = "' + cleanRuta + '"';
+      whereEP += ' AND ep.Ruta = "' + cleanRuta + '"';
+    }
+
+    // Flores from Carga_CT with JOIN to Empleado for name
+    var flores = dbQuery(
+      'SELECT c.id_empleado, e.nombre as nombre, c.ruta, c.fecha, ' +
+      'SUM(CAST(c.flores_1ra_visita AS SIGNED) + CAST(c.flores_2da_visita AS SIGNED) + CAST(c.flores_3ra_visita AS SIGNED)) as flores_totales ' +
+      'FROM Carga_CT c ' +
+      'LEFT JOIN Empleado e ON c.id_empleado = e.id_empleado ' +
+      whereCT + ' ' +
+      'GROUP BY c.id_empleado, e.nombre, c.ruta, c.fecha ' +
+      'ORDER BY c.id_empleado, c.fecha'
+    );
+
+    // Area from Ejecucion_Polinizacion
+    var areas = dbQuery(
+      'SELECT ep.id_empleado, ep.Ruta, ep.fecha, ' +
+      'SUM(CAST(ep.area_total AS DECIMAL(10,2))) as area_total ' +
+      'FROM Ejecucion_Polinizacion ep ' +
+      whereEP + ' ' +
+      'GROUP BY ep.id_empleado, ep.Ruta, ep.fecha ' +
+      'ORDER BY ep.id_empleado, ep.fecha'
+    );
+
+    // Get available rutas for the filter
+    var rutas = dbQuery(
+      'SELECT DISTINCT ruta FROM Carga_CT ' +
+      'WHERE ruta IS NOT NULL AND ruta != "" ORDER BY ruta'
+    );
+
+    return {
+      flores: flores.rows,
+      areas: areas.rows,
+      rutas: rutas.rows.map(function(r) { return r.ruta; })
+    };
   } catch(e) {
     return { error: e.message };
   }

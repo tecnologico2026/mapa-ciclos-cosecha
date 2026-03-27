@@ -1,0 +1,43 @@
+# Virtual environments
+.venv/
+
+# Playwright MCP logs
+.playwright-mcp/
+
+# Data files (managed externally)
+*.json
+*.csv
+*.xlsx
+*.xlsm
+*.kml
+*.geojson
+
+# Shapefiles
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.qmd
+*.idx
+SHAPE_PAM/
+SHP/
+SHP (2023)/
+SHP 2026/
+SHP AUX/
+shape/
+shape2/
+
+# Screenshots and images
+*.png
+
+# Python scripts (auxiliary)
+*.py
+
+# Windows Zone.Identifier files
+*:Zone.Identifier
+
+# Misc
+_inline_cierres.txt
+verify_map.html
+cierres_historicos.js
