@@ -66,6 +66,9 @@ function doGet(e) {
     var hasta = e.parameter.hasta || '';
     var ruta = e.parameter.ruta || '';
     result = getCargaOperarios(desde, hasta, ruta);
+  } else if (action === 'sheet_info') {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    result = { name: ss.getName(), url: ss.getUrl(), id: ss.getId() };
   } else if (action === 'list_tables') {
     result = dbQuery("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mty-palmas-db'");
   }
