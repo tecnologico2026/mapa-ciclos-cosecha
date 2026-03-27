@@ -616,6 +616,8 @@ function applyAPIData(laborKey, apiData) {
             l.dias_ciclo = null;
         }
     });
+    // Apply cierres immediately to override dias_ciclo from sheet
+    applyCierres();
     ORIG_DIAS = {};
     DATA.lots.forEach(function(l) { ORIG_DIAS[l.lote] = l.dias_ciclo; });
 
