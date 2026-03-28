@@ -564,16 +564,16 @@
             <div style="max-width:700px;margin:0 auto">
                 <div style="text-align:center;margin-bottom:1.2rem">
                     <h2 style="font-size:1.4rem;font-weight:800;color:var(--text);margin-bottom:0.3rem;letter-spacing:0.02em">CICLOS DE POLINIZACION POR LOTE</h2>
-                    <div style="font-size:0.85rem;color:var(--text-muted)" id="cl-fecha-hoy"></div>
+                    <div style="font-size:0.85rem;color:var(--text-muted)" id="clt-fecha-hoy"></div>
                 </div>
                 <div style="display:flex;gap:1rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:1.2rem">
                     <label style="font-size:0.9rem;color:var(--text-muted);font-weight:600">Ruta:</label>
-                    <select id="cl-ruta-select" style="font-size:0.9rem;padding:0.5rem 0.8rem;background:var(--card);color:var(--text);border:2px solid #818cf8;border-radius:8px;min-width:220px;cursor:pointer">
+                    <select id="clt-ruta-select" style="font-size:0.9rem;padding:0.5rem 0.8rem;background:var(--card);color:var(--text);border:2px solid #818cf8;border-radius:8px;min-width:220px;cursor:pointer">
                         <option value="">-- Seleccionar ruta --</option>
                     </select>
                 </div>
-                <div id="cl-lotes-resumen" style="display:flex;gap:0.6rem;justify-content:center;flex-wrap:wrap;margin-bottom:1rem"></div>
-                <div id="cl-lotes-table"></div>
+                <div id="clt-lotes-resumen" style="display:flex;gap:0.6rem;justify-content:center;flex-wrap:wrap;margin-bottom:1rem"></div>
+                <div id="clt-lotes-table"></div>
             </div>
         </div>
 
@@ -5209,10 +5209,10 @@ function renderControlLineasMatrix(data, container) {
 // ===== CICLOS LOTES TAB =====
 var _ciclosLotesInited = false;
 function initCiclosLotes() {
-    var sel = document.getElementById('cl-ruta-select');
+    var sel = document.getElementById('clt-ruta-select');
     if (!sel || !DATA || !DATA.lots) return;
 
-    var fechaEl = document.getElementById('cl-fecha-hoy');
+    var fechaEl = document.getElementById('clt-fecha-hoy');
     if (fechaEl && !fechaEl.textContent) fechaEl.textContent = new Date().toLocaleDateString('es-CO', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
 
     if (!_ciclosLotesInited) {
@@ -5232,12 +5232,12 @@ function initCiclosLotes() {
 }
 
 function renderCiclosLotesTable(ruta) {
-    var container = document.getElementById('cl-lotes-table');
-    var resumen = document.getElementById('cl-lotes-resumen');
+    var container = document.getElementById('clt-lotes-table');
+    var resumen = document.getElementById('clt-lotes-resumen');
     if (!container) return;
 
     // Set date
-    var fechaEl = document.getElementById('cl-fecha-hoy');
+    var fechaEl = document.getElementById('clt-fecha-hoy');
     if (fechaEl) fechaEl.textContent = new Date().toLocaleDateString('es-CO', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
 
     if (!ruta) {
