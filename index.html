@@ -5279,15 +5279,15 @@ function renderCiclosLotesTable(ruta) {
         resumen.innerHTML = bhtml;
     }
 
-    // Table
+    // Table - compact for many lots
     var thBg = '#1e293b';
-    var html = '<div style="text-align:center;margin-bottom:0.6rem"><span style="font-size:1.1rem;font-weight:800;color:#818cf8;letter-spacing:0.03em">' + ruta + '</span><span style="font-size:0.9rem;color:var(--text-muted);margin-left:0.5rem">' + lots.length + ' lotes</span></div>';
-    html += '<div style="overflow:auto;max-height:65vh;border-radius:10px;border:1px solid var(--border)">';
+    var html = '<div style="text-align:center;margin-bottom:0.4rem"><span style="font-size:0.95rem;font-weight:800;color:#818cf8;letter-spacing:0.03em">' + ruta + '</span><span style="font-size:0.8rem;color:var(--text-muted);margin-left:0.4rem">' + lots.length + ' lotes</span></div>';
+    html += '<div style="overflow:auto;max-height:70vh;border-radius:8px;border:1px solid var(--border)">';
     html += '<table style="border-collapse:collapse;width:100%">';
     html += '<thead style="position:sticky;top:0;z-index:1"><tr>';
-    html += '<th style="padding:10px 14px;background:' + thBg + ';color:var(--text-muted);font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;text-align:center;width:40px;border-bottom:2px solid #818cf8">Estado</th>';
-    html += '<th style="padding:10px 14px;background:' + thBg + ';color:var(--text-muted);font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;text-align:left;border-bottom:2px solid #818cf8">Lote</th>';
-    html += '<th style="padding:10px 14px;background:' + thBg + ';color:var(--text-muted);font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;text-align:center;border-bottom:2px solid #818cf8">Dias Ciclo</th>';
+    html += '<th style="padding:4px 8px;background:' + thBg + ';color:var(--text-muted);font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;text-align:center;width:28px;border-bottom:2px solid #818cf8"></th>';
+    html += '<th style="padding:4px 8px;background:' + thBg + ';color:var(--text-muted);font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;text-align:left;border-bottom:2px solid #818cf8">Lote</th>';
+    html += '<th style="padding:4px 8px;background:' + thBg + ';color:var(--text-muted);font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;text-align:center;border-bottom:2px solid #818cf8">Dias</th>';
     html += '</tr></thead><tbody>';
 
     lots.forEach(function(l, i) {
@@ -5296,10 +5296,10 @@ function renderCiclosLotesTable(ruta) {
         var color = getFillColor(dias);
         var bgRgb = hexToRgb(color);
         var rowBg = 'rgba(' + bgRgb + ',' + (i % 2 === 0 ? '0.10' : '0.18') + ')';
-        html += '<tr style="background:' + rowBg + ';transition:background 0.15s" onmouseenter="this.style.background=\'rgba(' + bgRgb + ',0.30)\'" onmouseleave="this.style.background=\'' + rowBg + '\'">';
-        html += '<td style="padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.05);text-align:center"><span style="display:inline-block;width:22px;height:22px;border-radius:5px;background:' + color + ';box-shadow:0 0 6px ' + color + '44"></span></td>';
-        html += '<td style="padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.05);font-weight:700;font-size:0.95rem;color:var(--text)">' + l.lote + '</td>';
-        html += '<td style="padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.05);text-align:center;font-weight:800;font-size:1.1rem;color:' + color + '">' + diasStr + '</td>';
+        html += '<tr style="background:' + rowBg + '">';
+        html += '<td style="padding:3px 8px;border-bottom:1px solid rgba(255,255,255,0.04);text-align:center"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:' + color + '"></span></td>';
+        html += '<td style="padding:3px 8px;border-bottom:1px solid rgba(255,255,255,0.04);font-weight:700;font-size:0.78rem;color:var(--text)">' + l.lote + '</td>';
+        html += '<td style="padding:3px 8px;border-bottom:1px solid rgba(255,255,255,0.04);text-align:center;font-weight:800;font-size:0.85rem;color:' + color + '">' + diasStr + '</td>';
         html += '</tr>';
     });
     html += '</tbody></table></div>';
