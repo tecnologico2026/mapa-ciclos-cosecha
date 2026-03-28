@@ -913,6 +913,13 @@ function applyCierres() {
 
         var state = getLotState(lote);
 
+        // Lotes excluidos de polinización (siempre blanco)
+        var LOTES_SIN_POLINIZAR = ['4AC01'];
+        if (LOTES_SIN_POLINIZAR.indexOf(lote) !== -1) {
+            lot.dias_ciclo = null;
+            return;
+        }
+
         // Dias Ciclo = Hoy - ultimo INGRESO (ignora APERTURA)
         if (state.lastIngreso) {
             var ingresoDate = new Date(state.lastIngreso.fecha + 'T00:00:00');
