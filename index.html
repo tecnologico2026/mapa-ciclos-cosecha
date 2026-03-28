@@ -2349,6 +2349,7 @@ function buildControlGeneral() {
         {nombre: '+'+c.rojo[0]+' DIAS', min: c.rojo[0], max: 99999, color: '#ef4444'}
     ];
     var totalLotes = 0, totalHas = 0;
+    var allHas = DATA.lots.reduce(function(s, l) { return s + (l.has || 0); }, 0);
     var items = rangos.map(function(r) {
         var lots = DATA.lots.filter(function(l) {
             return l.dias_ciclo !== null && l.dias_ciclo < 49000 && l.dias_ciclo >= r.min && l.dias_ciclo <= r.max;
@@ -2359,8 +2360,13 @@ function buildControlGeneral() {
         totalHas += has;
         return {rango: r.nombre, lotes: lots.length, has: Math.round(has*10)/10, porcentaje: 0, color: r.color};
     });
-    items.forEach(function(it) { it.porcentaje = totalHas > 0 ? Math.round(it.has / totalHas * 1000)/10 : 0; });
-    items.push({rango: 'TOTAL', lotes: totalLotes, has: Math.round(totalHas*10)/10, porcentaje: 100, color: '#94a3b8'});
+    // Sin evaluar (blanco)
+    var sinEvalLots = DATA.lots.filter(function(l) { return l.dias_ciclo === null || l.dias_ciclo === undefined; });
+    var sinEvalHas = 0;
+    sinEvalLots.forEach(function(l) { sinEvalHas += (l.has || 0); });
+    items.forEach(function(it) { it.porcentaje = allHas > 0 ? Math.round(it.has / allHas * 1000)/10 : 0; });
+    items.push({rango: 'SIN EVALUAR', lotes: sinEvalLots.length, has: Math.round(sinEvalHas*10)/10, porcentaje: allHas > 0 ? Math.round(sinEvalHas / allHas * 1000)/10 : 0, color: '#64748b'});
+    items.push({rango: 'TOTAL', lotes: totalLotes + sinEvalLots.length, has: Math.round(allHas*10)/10, porcentaje: 100, color: '#94a3b8'});
     return items;
 }
 function renderControl() {
