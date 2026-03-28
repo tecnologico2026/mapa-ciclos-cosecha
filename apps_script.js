@@ -91,6 +91,8 @@ function doPost(e) {
     result = deleteRegistro(data.lote, data.tipo || '', data.fecha);
   } else if (action === 'delete_cierre') {
     result = deleteRegistro(data.lote, 'CIERRE', data.fecha);
+  } else if (action === 'cargar_cierres') {
+    result = cargarCierresInicial(JSON.stringify(data.datos));
   }
 
   return ContentService
@@ -427,6 +429,37 @@ function getConsumoDetalle(fecha) {
       'ORDER BY ruta, id_empleado'
     );
     return { detalle: result.rows, fecha: fecha };
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+// ===== CARGA INICIAL DE CIERRES =====
+
+function cargarCierresInicial(datosJSON) {
+  try {
+    var datos = JSON.parse(datosJSON);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('CIERRES');
+
+    // Clear existing data (keep header)
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet.getRange(2, 1, lastRow - 1, 6).clearContent();
+    }
+
+    // Write new data
+    for (var i = 0; i < datos.length; i++) {
+      var row = i + 2;
+      sheet.getRange(row, 1).setNumberFormat('@').setValue(datos[i][0]); // LOTE
+      sheet.getRange(row, 2).setValue(datos[i][1]); // TIPO
+      sheet.getRange(row, 3).setNumberFormat('@').setValue(datos[i][2]); // FECHA as text
+      sheet.getRange(row, 4).setValue(datos[i][3]); // SUPERVISOR
+      sheet.getRange(row, 5).setValue(datos[i][4]); // LABOR
+      sheet.getRange(row, 6).setNumberFormat('@').setValue(datos[i][5]); // REGISTRADO as text
+    }
+
+    return { success: true, registros: datos.length };
   } catch(e) {
     return { error: e.message };
   }
