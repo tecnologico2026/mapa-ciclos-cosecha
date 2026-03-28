@@ -585,7 +585,7 @@ _CIERRES_LOCAL.forEach(function(c) {
     var exists = CIERRES.some(function(h) { return h.lote === c.lote && h.tipo === c.tipo && h.fecha === c.fecha; });
     if (!exists) CIERRES.push(c);
 });
-var API_URL = 'https://script.google.com/macros/s/AKfycbxQemFZ4O374jvY4wp2-WnEemWIHcOAJRe5Tqyz8bSZXvdBB4N7pygD-FsR1cTTOy_Q/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbzXS6Bc--uJxmko_IHn26yXOGRt8U2RlkAC93qFyieg4SAPlMFtiU10FOXwyGPFoQuP/exec';
 var API_DATA = {}; // Cache of API responses per labor
 
 function loadData() {
@@ -3675,9 +3675,12 @@ function loadRendimientos(panel) {
     ctrl += '<input type="date" id="rend-hasta" value="' + today + '" style="font-size:0.75rem;padding:3px 6px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px">';
     ctrl += '<button id="rend-apply" style="font-size:0.75rem;padding:4px 12px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">Consultar</button>';
     ctrl += '<button id="rend-detalle" style="font-size:0.75rem;padding:4px 12px;background:#f97316;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">Ver Detalle</button>';
+    ctrl += '<span style="margin-left:6px;border-left:1px solid #334155;padding-left:6px"></span>';
+    ctrl += '<label style="font-size:0.72rem;color:#94a3b8">Ruta:</label>';
+    ctrl += '<select id="rend-lotes-ruta" style="font-size:0.73rem;padding:3px 6px;background:#1e293b;color:#e2e8f0;border:1px solid #818cf8;border-radius:4px;cursor:pointer"><option value="">-- Seleccionar --</option></select>';
+    ctrl += '<button id="rend-lotes-btn" style="font-size:0.75rem;padding:4px 12px;background:#818cf8;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">Lotes Mapa</button>';
     ctrl += '</div>';
     ctrl += '<div id="rend-group-filter" style="display:flex;gap:0.3rem;flex-wrap:wrap;margin-bottom:0.5rem"></div>';
-    ctrl += '<div id="rend-lotes-mapa"></div>';
     ctrl += '<div id="rend-table-area"><div style="text-align:center;color:#94a3b8;font-size:0.8rem;padding:0.5rem">Cargando...</div></div>';
     ctrl += '<div style="display:flex;align-items:center;gap:6px;margin-top:0.4rem">';
     ctrl += '<span style="font-size:0.65rem;color:#94a3b8">Tama\u00f1o:</span>';
@@ -3700,6 +3703,29 @@ function loadRendimientos(panel) {
         var desde = document.getElementById('rend-desde').value || '';
         fetchRendimientosDetalle(desde);
     });
+
+    // Populate ruta select with available rutas from map data
+    var rutaSelect = document.getElementById('rend-lotes-ruta');
+    if (rutaSelect && DATA && DATA.lots) {
+        var rutas = {};
+        DATA.lots.forEach(function(l) { if (l.ruta) rutas[l.ruta] = true; });
+        Object.keys(rutas).sort().forEach(function(r) {
+            var opt = document.createElement('option');
+            opt.value = r;
+            opt.textContent = r;
+            rutaSelect.appendChild(opt);
+        });
+        rutaSelect.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
+        rutaSelect.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+    }
+
+    document.getElementById('rend-lotes-btn').addEventListener('click', function(e) {
+        e.stopPropagation();
+        var ruta = document.getElementById('rend-lotes-ruta').value;
+        if (!ruta) return;
+        renderRendLotesMapa(ruta);
+    });
+
     panel.querySelectorAll('input,button').forEach(function(el) {
         el.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
         el.addEventListener('mousedown', function(e) { e.stopPropagation(); });
@@ -3757,12 +3783,9 @@ function renderRendFilters(panel) {
     _rendData.forEach(function(r) {
         var group = r[cfg.groupKey] || r[cfg.groupKey.charAt(0).toUpperCase() + cfg.groupKey.slice(1)] || '';
         var active = !_rendHiddenGroups[group];
-        var selected = _rendSelectedRuta === group;
         var bg = active ? cfg.titleColor : '#334155';
         var color = active ? '#fff' : '#64748b';
-        var border = selected ? '2px solid #818cf8' : '1px solid ' + cfg.borderColor;
-        var shadow = selected ? ';box-shadow:0 0 6px rgba(129,140,248,0.5)' : '';
-        html += '<button class="rend-group-btn" data-group="' + group + '" style="font-size:0.7rem;padding:3px 8px;background:' + bg + ';color:' + color + ';border:' + border + ';border-radius:4px;cursor:pointer;font-weight:600' + shadow + '">' + group + '</button>';
+        html += '<button class="rend-group-btn" data-group="' + group + '" style="font-size:0.7rem;padding:3px 8px;background:' + bg + ';color:' + color + ';border:1px solid ' + cfg.borderColor + ';border-radius:4px;cursor:pointer;font-weight:600">' + group + '</button>';
     });
     container.innerHTML = html;
     container.querySelectorAll('.rend-group-btn').forEach(function(btn) {
@@ -3770,13 +3793,9 @@ function renderRendFilters(panel) {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
             var group = btn.getAttribute('data-group');
-            // Left click: toggle visibility in table
             if (_rendHiddenGroups[group]) { delete _rendHiddenGroups[group]; } else { _rendHiddenGroups[group] = true; }
-            // Select/deselect ruta for lotes panel
-            _rendSelectedRuta = (_rendSelectedRuta === group) ? null : group;
             renderRendFilters(document.getElementById('map-panel-rendimientos'));
             renderRendTable();
-            renderRendLotesMapa(_rendSelectedRuta);
         });
     });
 }
@@ -3926,7 +3945,7 @@ function renderRendDetalle(rows, fecha) {
 }
 
 function renderRendLotesMapa(ruta) {
-    var container = document.getElementById('rend-lotes-mapa');
+    var container = document.getElementById('rend-table-area');
     if (!container) return;
 
     if (!ruta) {
@@ -3965,8 +3984,15 @@ function renderRendLotesMapa(ruta) {
         html += '</tr>';
     });
     html += '</tbody></table></div>';
+    html += '<button id="rend-lotes-back" style="margin-top:0.4rem;font-size:0.7rem;padding:3px 10px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer">Volver a Resumen</button>';
 
     container.innerHTML = html;
+
+    document.getElementById('rend-lotes-back').addEventListener('click', function(ev) {
+        ev.stopPropagation();
+        fetchRendimientos(document.getElementById('map-panel-rendimientos'));
+    });
+    document.getElementById('rend-lotes-back').addEventListener('pointerdown', function(ev) { ev.stopPropagation(); });
 
     // Click on row to highlight and center lot on map
     container.querySelectorAll('[data-rend-lote]').forEach(function(row) {
