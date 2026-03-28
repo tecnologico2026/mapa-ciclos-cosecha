@@ -319,14 +319,14 @@ function getRendimientosDetalle(fecha) {
       return { error: 'Fecha requerida en formato yyyy-MM-dd' };
     }
     var result = dbQuery(
-      'SELECT ep.Ruta as ruta, ep.Lote as lote, ep.id_empleado, ' +
+      'SELECT ep.Ruta as ruta, ep.id_lote as lote, ep.id_empleado, ' +
       'ep.`Flores Totales` as flores_totales, ' +
       'CAST(ep.area_total AS DECIMAL(10,2)) as area_total, ' +
       'ep.fecha ' +
       'FROM Ejecucion_Polinizacion ep ' +
       'WHERE ep.fecha = "' + fecha + '" ' +
       'AND ep.Ruta IS NOT NULL AND ep.Ruta != "" ' +
-      'ORDER BY ep.Ruta, ep.Lote'
+      'ORDER BY ep.Ruta, ep.id_lote'
     );
     return { detalle: result.rows, fecha: fecha };
   } catch(e) {
