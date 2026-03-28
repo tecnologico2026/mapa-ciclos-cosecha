@@ -130,6 +130,26 @@ function getLaborData(sheetName) {
   return { lots: lots, updated: new Date().toISOString() };
 }
 
+function parseFecha(val) {
+  if (!val) return '';
+  // If it's a Date object (from Sheets), format with timezone
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, 'America/Bogota', 'yyyy-MM-dd');
+  }
+  // If it's a string, check if it's already yyyy-MM-dd
+  var s = val.toString().trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return s.substring(0, 10);
+  }
+  // Try to parse as date with timezone safety
+  try {
+    var d = new Date(s + 'T12:00:00');
+    return Utilities.formatDate(d, 'America/Bogota', 'yyyy-MM-dd');
+  } catch(e) {
+    return s;
+  }
+}
+
 function getCierres() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('CIERRES');
@@ -144,7 +164,7 @@ function getCierres() {
 
     // New format: LOTE | TIPO | FECHA | SUPERVISOR | LABOR | REGISTRADO
     var tipo = row[1] ? row[1].toString() : '';
-    var isNewFormat = (tipo === 'INGRESO' || tipo === 'CIERRE');
+    var isNewFormat = (tipo === 'INGRESO' || tipo === 'CIERRE' || tipo === 'APERTURA');
 
     var fecha = '';
     var supervisor = '';
@@ -153,36 +173,20 @@ function getCierres() {
 
     if (isNewFormat) {
       // New format
-      try {
-        fecha = Utilities.formatDate(new Date(row[2]), 'America/Bogota', 'yyyy-MM-dd');
-      } catch(e) {
-        fecha = row[2] ? row[2].toString() : '';
-      }
+      fecha = parseFecha(row[2]);
       supervisor = row[3] ? row[3].toString() : '';
       labor = row[4] ? row[4].toString() : '';
       if (row[5]) {
-        try {
-          registrado = Utilities.formatDate(new Date(row[5]), 'America/Bogota', 'yyyy-MM-dd\'T\'HH:mm:ss');
-        } catch(e2) {
-          registrado = row[5].toString();
-        }
+        registrado = parseFecha(row[5]);
       }
     } else {
       // Old format: LOTE | FECHA | SUPERVISOR | LABOR | REGISTRADO
       tipo = 'CIERRE';
-      try {
-        fecha = Utilities.formatDate(new Date(row[1]), 'America/Bogota', 'yyyy-MM-dd');
-      } catch(e) {
-        fecha = row[1] ? row[1].toString() : '';
-      }
+      fecha = parseFecha(row[1]);
       supervisor = row[2] ? row[2].toString() : '';
       labor = row[3] ? row[3].toString() : '';
       if (row[4]) {
-        try {
-          registrado = Utilities.formatDate(new Date(row[4]), 'America/Bogota', 'yyyy-MM-dd\'T\'HH:mm:ss');
-        } catch(e2) {
-          registrado = row[4].toString();
-        }
+        registrado = parseFecha(row[4]);
       }
     }
 
