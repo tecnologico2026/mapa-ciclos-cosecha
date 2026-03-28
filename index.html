@@ -5056,28 +5056,69 @@ function loadControlLineasResumen() {
 }
 
 function renderControlLineasResumen(resumen, container) {
-    var html = '<table style="width:100%;border-collapse:collapse;font-size:0.78rem">';
-    html += '<thead><tr style="background:rgba(255,255,255,0.05)">';
-    ['Ruta','Lote','Lineas','Cubiertas','Dias','Cobertura','Estado'].forEach(function(h) {
-        html += '<th style="padding:0.5rem 0.6rem;text-align:left;border-bottom:2px solid var(--border)">' + h + '</th>';
-    });
-    html += '</tr></thead><tbody>';
-
+    // Group by ruta
+    var byRuta = {};
     resumen.forEach(function(r) {
-        var pctColor = r.pct_cobertura >= 100 ? '#22c55e' : r.pct_cobertura >= 80 ? '#eab308' : '#ef4444';
-        var estado = r.pct_cobertura >= 100 ? '✓' : r.pct_cobertura >= 80 ? '⚠' : '✗';
-        var estadoColor = pctColor;
-        html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer" onclick="loadControlLineasDetalle(\'' + r.lote + '\')" onmouseover="this.style.background=\'rgba(255,255,255,0.05)\'" onmouseout="this.style.background=\'transparent\'">';
-        html += '<td style="padding:0.4rem 0.6rem;color:var(--text-muted)">' + r.ruta + '</td>';
-        html += '<td style="padding:0.4rem 0.6rem;font-weight:700">' + r.lote + '</td>';
-        html += '<td style="padding:0.4rem 0.6rem;text-align:center">' + r.max_linea + '</td>';
-        html += '<td style="padding:0.4rem 0.6rem;text-align:center">' + r.lineas_cubiertas + '</td>';
-        html += '<td style="padding:0.4rem 0.6rem;text-align:center">' + r.dias + '</td>';
-        html += '<td style="padding:0.4rem 0.6rem;text-align:center;font-weight:700;color:' + pctColor + '">' + r.pct_cobertura + '%</td>';
-        html += '<td style="padding:0.4rem 0.6rem;text-align:center;font-size:1rem;color:' + estadoColor + '">' + estado + '</td>';
-        html += '</tr>';
+        if (!byRuta[r.ruta]) byRuta[r.ruta] = [];
+        byRuta[r.ruta].push(r);
     });
-    html += '</tbody></table>';
+    var rutas = Object.keys(byRuta).sort();
+
+    function buildTable(items, startNum) {
+        var t = '<table style="width:100%;border-collapse:collapse;font-size:0.75rem">';
+        t += '<thead><tr style="background:rgba(255,255,255,0.05)">';
+        ['#','Lote','Lineas','Cub.','Dias','Cob.',''].forEach(function(h) {
+            t += '<th style="padding:0.4rem 0.5rem;text-align:center;border-bottom:2px solid var(--border);font-size:0.7rem">' + h + '</th>';
+        });
+        t += '</tr></thead><tbody>';
+        items.forEach(function(r, i) {
+            var pctColor = r.pct_cobertura >= 100 ? '#22c55e' : r.pct_cobertura >= 80 ? '#eab308' : '#ef4444';
+            var estado = r.pct_cobertura >= 100 ? '✓' : r.pct_cobertura >= 80 ? '⚠' : '✗';
+            t += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer" onclick="loadControlLineasDetalle(\'' + r.lote + '\')" onmouseover="this.style.background=\'rgba(255,255,255,0.05)\'" onmouseout="this.style.background=\'transparent\'">';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center;color:var(--text-muted);font-size:0.65rem">' + (startNum + i) + '</td>';
+            t += '<td style="padding:0.3rem 0.4rem;font-weight:700">' + r.lote + '</td>';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center">' + r.max_linea + '</td>';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center">' + r.lineas_cubiertas + '</td>';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center">' + r.dias + '</td>';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center;font-weight:700;color:' + pctColor + '">' + r.pct_cobertura + '%</td>';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center;color:' + pctColor + '">' + estado + '</td>';
+            t += '</tr>';
+        });
+        t += '</tbody></table>';
+        return t;
+    }
+
+    var html = '';
+    rutas.forEach(function(ruta) {
+        var items = byRuta[ruta];
+        var okCount = items.filter(function(r) { return r.pct_cobertura >= 100; }).length;
+        var warnCount = items.filter(function(r) { return r.pct_cobertura >= 80 && r.pct_cobertura < 100; }).length;
+        var failCount = items.filter(function(r) { return r.pct_cobertura < 80; }).length;
+
+        html += '<div style="margin-bottom:1.5rem">';
+        html += '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;flex-wrap:wrap">';
+        html += '<h3 style="font-size:0.9rem;font-weight:700;color:var(--text);margin:0">' + ruta + '</h3>';
+        html += '<span style="font-size:0.7rem;color:var(--text-muted)">' + items.length + ' lotes</span>';
+        if (okCount > 0) html += '<span style="font-size:0.65rem;background:rgba(34,197,94,0.2);color:#22c55e;padding:2px 6px;border-radius:4px">' + okCount + ' OK</span>';
+        if (warnCount > 0) html += '<span style="font-size:0.65rem;background:rgba(234,179,8,0.2);color:#eab308;padding:2px 6px;border-radius:4px">' + warnCount + ' parcial</span>';
+        if (failCount > 0) html += '<span style="font-size:0.65rem;background:rgba(239,68,68,0.2);color:#ef4444;padding:2px 6px;border-radius:4px">' + failCount + ' falta</span>';
+        html += '</div>';
+
+        // Split into 2 columns if more than 15 lots
+        if (items.length > 15) {
+            var half = Math.ceil(items.length / 2);
+            var left = items.slice(0, half);
+            var right = items.slice(half);
+            html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">';
+            html += '<div>' + buildTable(left, 1) + '</div>';
+            html += '<div>' + buildTable(right, half + 1) + '</div>';
+            html += '</div>';
+        } else {
+            html += buildTable(items, 1);
+        }
+        html += '</div>';
+    });
+
     container.innerHTML = html;
 }
 
