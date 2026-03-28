@@ -3470,7 +3470,7 @@ function renderMapPanels() {
     // Collect data
     var groups = {};
     var diasCount = {};
-    var rangoData = {verde: 0, amarillo: 0, naranja: 0, rojo: 0};
+    var rangoData = {verde: 0, amarillo: 0, naranja: 0, rojo: 0, sineval: 0};
 
     DATA.lots.forEach(function(l) {
         var dias = l.dias_ciclo;
@@ -3483,7 +3483,7 @@ function renderMapPanels() {
 
         // Range summary
         var c = getColor(dias);
-        if (c !== 'blanco') rangoData[c] += has;
+        if (c === 'blanco') { rangoData.sineval += has; } else { rangoData[c] += has; }
 
         // Per-group atrasados
         if (!groups[gv]) groups[gv] = {name: gv, lotes: 0, has: 0};
@@ -3551,18 +3551,20 @@ function renderMapPanels() {
     // ---- Panel 2: Resumen ciclos por rango ----
     var p2 = document.getElementById('map-panel-resumen');
     if (p2) {
-        var totalHasR = rangoData.verde + rangoData.amarillo + rangoData.naranja + rangoData.rojo;
+        var totalHasR = rangoData.verde + rangoData.amarillo + rangoData.naranja + rangoData.rojo + (rangoData.sineval || 0);
         var html2 = '<div class="map-panel-title">Ciclos - Resumen</div>';
         html2 += '<table><thead><tr><th></th><th>Dias</th><th>Has</th><th>%</th></tr></thead><tbody>';
 
         var rangos = [
-            {name: 'verde', label: colores.verde[0] + ' - ' + colores.verde[1], color: 'var(--verde)', has: rangoData.verde},
-            {name: 'amarillo', label: colores.amarillo[0] + ' - ' + colores.amarillo[1], color: 'var(--amarillo)', has: rangoData.amarillo + rangoData.naranja},
-            {name: 'rojo', label: 'Mayor ' + colores.rojo[0], color: 'var(--rojo)', has: rangoData.rojo}
+            {name: 'verde', letter: 'V', label: colores.verde[0] + ' - ' + colores.verde[1], color: 'var(--verde)', has: rangoData.verde},
+            {name: 'amarillo', letter: 'A', label: colores.amarillo[0] + ' - ' + colores.amarillo[1], color: 'var(--amarillo)', has: rangoData.amarillo},
+            {name: 'naranja', letter: 'N', label: colores.naranja[0] + ' - ' + colores.naranja[1], color: 'var(--naranja)', has: rangoData.naranja},
+            {name: 'rojo', letter: 'R', label: 'Mayor ' + colores.rojo[0], color: 'var(--rojo)', has: rangoData.rojo},
+            {name: 'sineval', letter: 'S', label: 'Sin Evaluar', color: '#64748b', has: rangoData.sineval || 0}
         ];
         rangos.forEach(function(r) {
             var pct = totalHasR > 0 ? (r.has / totalHasR * 100) : 0;
-            html2 += '<tr><td><span class="color-cell" style="background:' + r.color + ';color:#000">' + r.name.toUpperCase().charAt(0) + '</span></td>';
+            html2 += '<tr><td><span class="color-cell" style="background:' + r.color + ';color:#000">' + r.letter + '</span></td>';
             html2 += '<td>' + r.label + '</td><td class="num">' + r.has.toFixed(1) + '</td><td class="num">' + pct.toFixed(1) + '%</td></tr>';
         });
         html2 += '</tbody></table>';
