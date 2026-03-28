@@ -703,17 +703,42 @@ function deleteCierreFromAPI(lote, fecha) {
 // Helper: get lot state from CIERRES
 function getLotState(lote) {
     var registros = CIERRES.filter(function(c) { return c.lote === lote; });
-    registros.sort(function(a, b) { return b.fecha.localeCompare(a.fecha) || b.tipo.localeCompare(a.tipo); });
-    var lastIngreso = null;
+    // Sort chronologically ascending
+    registros.sort(function(a, b) { return a.fecha.localeCompare(b.fecha) || a.tipo.localeCompare(b.tipo); });
+
     var lastCierre = null;
     var lastApertura = null;
-    for (var i = 0; i < registros.length; i++) {
-        if (!lastIngreso && registros[i].tipo === 'INGRESO') lastIngreso = registros[i];
+    var cycleIngreso = null; // INGRESO del ciclo con el ultimo CIERRE
+
+    // Find last CIERRE and last APERTURA
+    for (var i = registros.length - 1; i >= 0; i--) {
         if (!lastCierre && registros[i].tipo === 'CIERRE') lastCierre = registros[i];
         if (!lastApertura && registros[i].tipo === 'APERTURA') lastApertura = registros[i];
     }
-    var ingresoAbierto = lastIngreso && (!lastCierre || lastIngreso.fecha > lastCierre.fecha);
-    return { lastIngreso: lastIngreso, lastCierre: lastCierre, lastApertura: lastApertura, ingresoAbierto: ingresoAbierto };
+
+    // Find the INGRESO that corresponds to the last CIERRE
+    // It's the last INGRESO that is <= the CIERRE date
+    if (lastCierre) {
+        for (var j = registros.length - 1; j >= 0; j--) {
+            if (registros[j].tipo === 'INGRESO' && registros[j].fecha <= lastCierre.fecha) {
+                cycleIngreso = registros[j];
+                break;
+            }
+        }
+    }
+
+    // If no CIERRE, use the first INGRESO
+    if (!cycleIngreso) {
+        for (var k = 0; k < registros.length; k++) {
+            if (registros[k].tipo === 'INGRESO') {
+                cycleIngreso = registros[k];
+                break;
+            }
+        }
+    }
+
+    var ingresoAbierto = cycleIngreso && (!lastCierre || cycleIngreso.fecha > lastCierre.fecha);
+    return { lastIngreso: cycleIngreso, lastCierre: lastCierre, lastApertura: lastApertura, ingresoAbierto: ingresoAbierto };
 }
 
 function applyLaborData(laborKey) {
