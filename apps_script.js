@@ -66,6 +66,16 @@ function doGet(e) {
     var hasta = e.parameter.hasta || '';
     var ruta = e.parameter.ruta || '';
     result = getCargaOperarios(desde, hasta, ruta);
+  } else if (action === 'control_lineas_resumen') {
+    var desde = e.parameter.desde || '';
+    var hasta = e.parameter.hasta || '';
+    var ruta = e.parameter.ruta || '';
+    result = getControlLineasResumen(desde, hasta, ruta);
+  } else if (action === 'control_lineas_detalle') {
+    var lote = e.parameter.lote || '';
+    var desde = e.parameter.desde || '';
+    var hasta = e.parameter.hasta || '';
+    result = getControlLineasDetalle(lote, desde, hasta);
   } else if (action === 'sheet_info') {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     result = { name: ss.getName(), url: ss.getUrl(), id: ss.getId() };
@@ -301,7 +311,7 @@ function dbQuery(sql) {
 function dbExplore(tabla) {
   try {
     // Whitelist allowed table names to prevent SQL injection
-    var allowed = ['Ejecucion_Polinizacion', 'Ejecucion_Cosecha', 'Ejecucion_Plateo', 'Ejecucion_Poda', 'Consumo_Hormona', 'Carga_CT', 'Empleado'];
+    var allowed = ['Ejecucion_Polinizacion', 'Ejecucion_Cosecha', 'Ejecucion_Plateo', 'Ejecucion_Poda', 'Consumo_Hormona', 'Carga_CT', 'Empleado', 'Linea_Palma', 'Lote'];
     if (allowed.indexOf(tabla) === -1) {
       return { error: 'Tabla no permitida: ' + tabla };
     }
@@ -522,6 +532,121 @@ function getCargaOperarios(desde, hasta, ruta) {
       areas: areas.rows,
       rutas: rutas.rows.map(function(r) { return r.ruta; })
     };
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+// ===== CONTROL DE LINEAS DE POLINIZACION =====
+
+function getControlLineasResumen(desde, hasta, ruta) {
+  try {
+    var dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!desde || !hasta || !dateRegex.test(desde) || !dateRegex.test(hasta)) {
+      return { error: 'Fechas requeridas en formato yyyy-MM-dd' };
+    }
+
+    var lineaInfo = dbQuery(
+      'SELECT lp.id_lote, MAX(CAST(lp.linea AS SIGNED)) as max_linea, ' +
+      'SUM(CAST(lp.numero_palmas AS SIGNED)) as total_palmas ' +
+      'FROM Linea_Palma lp GROUP BY lp.id_lote'
+    );
+    var lineaMap = {};
+    lineaInfo.rows.forEach(function(r) {
+      lineaMap[r.id_lote] = { max_linea: parseInt(r.max_linea) || 0, total_palmas: parseInt(r.total_palmas) || 0 };
+    });
+
+    var where = 'WHERE ep.fecha >= "' + desde + '" AND ep.fecha <= "' + hasta + '"';
+    where += ' AND ep.Ruta IS NOT NULL AND ep.Ruta != ""';
+    if (ruta) {
+      var cleanRuta = ruta.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ %._-]/g, '');
+      where += ' AND ep.Ruta = "' + cleanRuta + '"';
+    }
+    var epData = dbQuery(
+      'SELECT ep.id_lote, ep.fecha, CAST(ep.linea_inicial AS SIGNED) as li, ' +
+      'CAST(ep.linea_final AS SIGNED) as lf, ep.Ruta ' +
+      'FROM Ejecucion_Polinizacion ep ' + where +
+      ' ORDER BY ep.id_lote, ep.fecha'
+    );
+
+    var lotes = {};
+    epData.rows.forEach(function(r) {
+      var lote = r.id_lote;
+      if (!lotes[lote]) {
+        var info = lineaMap[lote] || { max_linea: 0, total_palmas: 0 };
+        lotes[lote] = { ruta: r.Ruta, max_linea: info.max_linea, total_palmas: info.total_palmas, fechas: {}, lineas_cubiertas: {} };
+      }
+      lotes[lote].fechas[r.fecha] = true;
+      var li = parseInt(r.li) || 0;
+      var lf = parseInt(r.lf) || 0;
+      for (var l = li; l <= lf; l++) {
+        lotes[lote].lineas_cubiertas[l] = true;
+      }
+    });
+
+    var resumen = [];
+    var rutasSet = {};
+    Object.keys(lotes).forEach(function(lote) {
+      var d = lotes[lote];
+      var cubiertas = Object.keys(d.lineas_cubiertas).length;
+      var pct = d.max_linea > 0 ? Math.round(cubiertas / d.max_linea * 1000) / 10 : 0;
+      resumen.push({
+        lote: lote, ruta: d.ruta, max_linea: d.max_linea, total_palmas: d.total_palmas,
+        dias: Object.keys(d.fechas).length, lineas_cubiertas: cubiertas, pct_cobertura: pct
+      });
+      if (d.ruta) rutasSet[d.ruta] = true;
+    });
+    resumen.sort(function(a, b) { return a.ruta.localeCompare(b.ruta) || a.lote.localeCompare(b.lote); });
+
+    return { resumen: resumen, rutas: Object.keys(rutasSet).sort() };
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+function getControlLineasDetalle(lote, desde, hasta) {
+  try {
+    var dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!lote || !desde || !hasta || !dateRegex.test(desde) || !dateRegex.test(hasta)) {
+      return { error: 'Lote y fechas requeridos' };
+    }
+    var cleanLote = lote.replace(/[^a-zA-Z0-9]/g, '');
+
+    var lineaInfo = dbQuery(
+      'SELECT MAX(CAST(linea AS SIGNED)) as max_linea FROM Linea_Palma WHERE id_lote = "' + cleanLote + '"'
+    );
+    var maxLinea = parseInt(lineaInfo.rows[0].max_linea) || 0;
+
+    var epData = dbQuery(
+      'SELECT fecha, CAST(linea_inicial AS SIGNED) as li, CAST(linea_final AS SIGNED) as lf, id_empleado ' +
+      'FROM Ejecucion_Polinizacion ' +
+      'WHERE id_lote = "' + cleanLote + '" AND fecha >= "' + desde + '" AND fecha <= "' + hasta + '" ' +
+      'ORDER BY fecha, linea_inicial'
+    );
+
+    var fechasSet = {};
+    var coverage = {};
+    epData.rows.forEach(function(r) {
+      fechasSet[r.fecha] = true;
+      if (!coverage[r.fecha]) coverage[r.fecha] = {};
+      var li = parseInt(r.li) || 0;
+      var lf = parseInt(r.lf) || 0;
+      for (var l = li; l <= lf; l++) {
+        coverage[r.fecha][l] = true;
+      }
+    });
+    var dates = Object.keys(fechasSet).sort();
+
+    var matrix = [];
+    for (var line = 1; line <= maxLinea; line++) {
+      var row = [];
+      for (var d = 0; d < dates.length; d++) {
+        row.push(coverage[dates[d]] && coverage[dates[d]][line] ? 1 : 0);
+      }
+      matrix.push(row);
+    }
+
+    return { lote: cleanLote, max_linea: maxLinea, dates: dates, matrix: matrix };
   } catch(e) {
     return { error: e.message };
   }

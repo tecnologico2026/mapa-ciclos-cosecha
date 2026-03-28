@@ -306,6 +306,7 @@
             <button class="tab" data-tab="auxiliares">Auxiliares</button>
             <button class="tab" data-tab="consumo">Consumo</button>
             <button class="tab" data-tab="carga">Carga CT</button>
+            <button class="tab" data-tab="control_lineas">Control Lineas</button>
         </div>
 
         <!-- SVG MAP -->
@@ -527,6 +528,33 @@
                     <div id="carga-table-container" style="overflow-x:auto">
                         <div style="text-align:center;color:var(--text-muted);padding:2rem;font-size:0.85rem">Selecciona ruta y rango de fechas para consultar</div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+    <!-- CONTROL LINEAS -->
+        <div class="tab-content" id="tab-control_lineas">
+            <div id="cl-dashboard">
+                <div style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+                    <label style="font-size:0.8rem;color:var(--text-muted)">Desde:</label>
+                    <input type="date" id="cl-desde" style="font-size:0.8rem;padding:0.35rem 0.5rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px">
+                    <label style="font-size:0.8rem;color:var(--text-muted)">Hasta:</label>
+                    <input type="date" id="cl-hasta" style="font-size:0.8rem;padding:0.35rem 0.5rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px">
+                    <label style="font-size:0.8rem;color:var(--text-muted)">Ruta:</label>
+                    <select id="cl-ruta-filter" style="font-size:0.8rem;padding:0.35rem 0.5rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px">
+                        <option value="">Todas</option>
+                    </select>
+                    <button id="cl-apply" style="font-size:0.8rem;padding:0.4rem 1rem;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">Consultar</button>
+                </div>
+                <div class="card" style="margin-bottom:1.25rem">
+                    <h2>Cobertura de Lineas por Lote</h2>
+                    <div id="cl-summary-container" style="overflow-x:auto">
+                        <div style="text-align:center;color:var(--text-muted);padding:2rem;font-size:0.85rem">Selecciona rango de fechas para consultar</div>
+                    </div>
+                </div>
+                <div class="card" id="cl-detail-card" style="display:none">
+                    <h2 id="cl-detail-title">Detalle Lote</h2>
+                    <div id="cl-matrix-container" style="overflow:auto;max-height:70vh"></div>
                 </div>
             </div>
         </div>
@@ -3616,6 +3644,7 @@ function renderMapPanels() {
 
 var _rendData = null; // cached rendimientos data
 var _rendHiddenGroups = {}; // hidden groups (rutas or zonas)
+var _rendSelectedRuta = null; // selected ruta to show map lotes
 var _rendPad = 6; // table cell padding level (0-8)
 var _rendWidth = 100; // table width percentage (50-150)
 var _rendConfig = {
@@ -3648,6 +3677,7 @@ function loadRendimientos(panel) {
     ctrl += '<button id="rend-detalle" style="font-size:0.75rem;padding:4px 12px;background:#f97316;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">Ver Detalle</button>';
     ctrl += '</div>';
     ctrl += '<div id="rend-group-filter" style="display:flex;gap:0.3rem;flex-wrap:wrap;margin-bottom:0.5rem"></div>';
+    ctrl += '<div id="rend-lotes-mapa"></div>';
     ctrl += '<div id="rend-table-area"><div style="text-align:center;color:#94a3b8;font-size:0.8rem;padding:0.5rem">Cargando...</div></div>';
     ctrl += '<div style="display:flex;align-items:center;gap:6px;margin-top:0.4rem">';
     ctrl += '<span style="font-size:0.65rem;color:#94a3b8">Tama\u00f1o:</span>';
@@ -3727,9 +3757,12 @@ function renderRendFilters(panel) {
     _rendData.forEach(function(r) {
         var group = r[cfg.groupKey] || r[cfg.groupKey.charAt(0).toUpperCase() + cfg.groupKey.slice(1)] || '';
         var active = !_rendHiddenGroups[group];
+        var selected = _rendSelectedRuta === group;
         var bg = active ? cfg.titleColor : '#334155';
         var color = active ? '#fff' : '#64748b';
-        html += '<button class="rend-group-btn" data-group="' + group + '" style="font-size:0.7rem;padding:3px 8px;background:' + bg + ';color:' + color + ';border:1px solid ' + cfg.borderColor + ';border-radius:4px;cursor:pointer;font-weight:600">' + group + '</button>';
+        var border = selected ? '2px solid #818cf8' : '1px solid ' + cfg.borderColor;
+        var shadow = selected ? ';box-shadow:0 0 6px rgba(129,140,248,0.5)' : '';
+        html += '<button class="rend-group-btn" data-group="' + group + '" style="font-size:0.7rem;padding:3px 8px;background:' + bg + ';color:' + color + ';border:' + border + ';border-radius:4px;cursor:pointer;font-weight:600' + shadow + '">' + group + '</button>';
     });
     container.innerHTML = html;
     container.querySelectorAll('.rend-group-btn').forEach(function(btn) {
@@ -3737,9 +3770,13 @@ function renderRendFilters(panel) {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
             var group = btn.getAttribute('data-group');
+            // Left click: toggle visibility in table
             if (_rendHiddenGroups[group]) { delete _rendHiddenGroups[group]; } else { _rendHiddenGroups[group] = true; }
+            // Select/deselect ruta for lotes panel
+            _rendSelectedRuta = (_rendSelectedRuta === group) ? null : group;
             renderRendFilters(document.getElementById('map-panel-rendimientos'));
             renderRendTable();
+            renderRendLotesMapa(_rendSelectedRuta);
         });
     });
 }
@@ -3886,6 +3923,75 @@ function renderRendDetalle(rows, fecha) {
         fetchRendimientos(document.getElementById('map-panel-rendimientos'));
     });
     document.getElementById('rend-back').addEventListener('pointerdown', function(ev) { ev.stopPropagation(); });
+}
+
+function renderRendLotesMapa(ruta) {
+    var container = document.getElementById('rend-lotes-mapa');
+    if (!container) return;
+
+    if (!ruta) {
+        container.innerHTML = '';
+        return;
+    }
+
+    var lots = DATA.lots.filter(function(l) { return l.ruta === ruta; });
+    lots.sort(function(a, b) {
+        var da = (a.dias_ciclo !== null && a.dias_ciclo !== undefined) ? a.dias_ciclo : -1;
+        var db = (b.dias_ciclo !== null && b.dias_ciclo !== undefined) ? b.dias_ciclo : -1;
+        return db - da;
+    });
+
+    var p = _rendPad;
+    var thStyle = 'padding:' + p + 'px ' + (p*2) + 'px;background:#1e293b;color:#94a3b8;font-weight:600;font-size:0.75rem;border:1px solid #334155;text-align:center';
+    var html = '<div style="font-size:0.8rem;font-weight:700;color:#818cf8;margin:0.5rem 0 0.3rem">Lotes en mapa: ' + ruta + ' (' + lots.length + ')</div>';
+    html += '<div style="max-height:300px;overflow-y:auto">';
+    html += '<table style="font-size:0.75rem;border-collapse:collapse;width:100%">';
+    html += '<thead style="position:sticky;top:0"><tr>';
+    html += '<th style="' + thStyle + ';width:20px"></th>';
+    html += '<th style="' + thStyle + ';text-align:left">Lote</th>';
+    html += '<th style="' + thStyle + '">Dias Ciclo</th>';
+    html += '</tr></thead><tbody>';
+
+    lots.forEach(function(l, i) {
+        var dias = l.dias_ciclo;
+        var diasStr = (dias !== null && dias !== undefined) ? Math.floor(dias) : '-';
+        var color = getFillColor(dias);
+        var bg = 'rgba(' + hexToRgb(color) + ',0.15)';
+        var tdStyle = 'padding:' + p + 'px ' + (p*2) + 'px;border:1px solid #334155;color:#e2e8f0';
+        html += '<tr style="background:' + bg + ';cursor:pointer" data-rend-lote="' + l.lote + '">';
+        html += '<td style="' + tdStyle + '"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:' + color + '"></span></td>';
+        html += '<td style="' + tdStyle + ';font-weight:700">' + l.lote + '</td>';
+        html += '<td style="' + tdStyle + ';text-align:center;color:' + color + ';font-weight:700;font-size:0.85rem">' + diasStr + '</td>';
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+
+    container.innerHTML = html;
+
+    // Click on row to highlight and center lot on map
+    container.querySelectorAll('[data-rend-lote]').forEach(function(row) {
+        row.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
+        row.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var loteName = row.getAttribute('data-rend-lote');
+            var path = document.querySelector('#svg-map .lot-path[data-lote="' + loteName + '"]');
+            if (path) {
+                document.querySelectorAll('#svg-map .lot-path.highlighted').forEach(function(p) { p.classList.remove('highlighted'); });
+                path.classList.add('highlighted');
+                var bbox = path.getBBox();
+                svgViewBox.x = bbox.x + bbox.width / 2 - svgViewBox.w / 2;
+                svgViewBox.y = bbox.y + bbox.height / 2 - svgViewBox.h / 2;
+                updateSVGViewBox();
+            }
+        });
+    });
+}
+
+function hexToRgb(hex) {
+    var r = parseInt(hex.slice(1,3), 16);
+    var g = parseInt(hex.slice(3,5), 16);
+    var b = parseInt(hex.slice(5,7), 16);
+    return r + ',' + g + ',' + b;
 }
 
 // ===== DRAGGABLE MAP PANELS =====
@@ -4931,6 +5037,220 @@ function exportCargaPDF() {
     document.addEventListener('click', function(e) {
         if (e.target.classList.contains('tab') && e.target.getAttribute('data-tab') === 'carga') {
             setTimeout(initCarga, 50);
+        }
+    });
+})();
+
+// ===== CONTROL DE LINEAS =====
+var _clLoaded = false;
+
+function initControlLineas() {
+    var btnApply = document.getElementById('cl-apply');
+    if (!btnApply) return;
+    if (!btnApply._bound) {
+        btnApply._bound = true;
+        btnApply.addEventListener('click', loadControlLineasResumen);
+    }
+    var desdeEl = document.getElementById('cl-desde');
+    var hastaEl = document.getElementById('cl-hasta');
+    if (!desdeEl.value) {
+        var today = new Date();
+        var weekAgo = new Date(today);
+        weekAgo.setDate(today.getDate() - 7);
+        desdeEl.value = weekAgo.toISOString().slice(0, 10);
+        hastaEl.value = today.toISOString().slice(0, 10);
+    }
+    if (!_clLoaded) {
+        _clLoaded = true;
+        loadControlLineasResumen();
+    }
+}
+
+function loadControlLineasResumen() {
+    var desde = document.getElementById('cl-desde').value;
+    var hasta = document.getElementById('cl-hasta').value;
+    var ruta = document.getElementById('cl-ruta-filter').value;
+    var container = document.getElementById('cl-summary-container');
+    var detailCard = document.getElementById('cl-detail-card');
+    detailCard.style.display = 'none';
+
+    container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:2rem;font-size:0.85rem">Consultando cobertura de lineas...</div>';
+
+    var url = API_URL + '?action=control_lineas_resumen';
+    if (desde) url += '&desde=' + desde;
+    if (hasta) url += '&hasta=' + hasta;
+    if (ruta) url += '&ruta=' + encodeURIComponent(ruta);
+
+    fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                container.innerHTML = '<div style="color:#ef4444;padding:1rem">' + data.error + '</div>';
+                return;
+            }
+            if (data.rutas && data.rutas.length > 0) {
+                var sel = document.getElementById('cl-ruta-filter');
+                var currentVal = sel.value;
+                sel.innerHTML = '<option value="">Todas</option>';
+                data.rutas.forEach(function(r) {
+                    sel.innerHTML += '<option value="' + r + '"' + (r === currentVal ? ' selected' : '') + '>' + r + '</option>';
+                });
+            }
+            if (!data.resumen || data.resumen.length === 0) {
+                container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:2rem;font-size:0.85rem">Sin datos para el rango seleccionado</div>';
+                return;
+            }
+            renderControlLineasResumen(data.resumen, container);
+        })
+        .catch(function(err) {
+            container.innerHTML = '<div style="color:#ef4444;padding:1rem">Error: ' + err.message + '</div>';
+        });
+}
+
+function renderControlLineasResumen(resumen, container) {
+    var html = '<table style="width:100%;border-collapse:collapse;font-size:0.78rem">';
+    html += '<thead><tr style="background:rgba(255,255,255,0.05)">';
+    ['Ruta','Lote','Lineas','Cubiertas','Dias','Cobertura','Estado'].forEach(function(h) {
+        html += '<th style="padding:0.5rem 0.6rem;text-align:left;border-bottom:2px solid var(--border)">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    resumen.forEach(function(r) {
+        var pctColor = r.pct_cobertura >= 100 ? '#22c55e' : r.pct_cobertura >= 80 ? '#eab308' : '#ef4444';
+        var estado = r.pct_cobertura >= 100 ? '✓' : r.pct_cobertura >= 80 ? '⚠' : '✗';
+        var estadoColor = pctColor;
+        html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer" onclick="loadControlLineasDetalle(\'' + r.lote + '\')" onmouseover="this.style.background=\'rgba(255,255,255,0.05)\'" onmouseout="this.style.background=\'transparent\'">';
+        html += '<td style="padding:0.4rem 0.6rem;color:var(--text-muted)">' + r.ruta + '</td>';
+        html += '<td style="padding:0.4rem 0.6rem;font-weight:700">' + r.lote + '</td>';
+        html += '<td style="padding:0.4rem 0.6rem;text-align:center">' + r.max_linea + '</td>';
+        html += '<td style="padding:0.4rem 0.6rem;text-align:center">' + r.lineas_cubiertas + '</td>';
+        html += '<td style="padding:0.4rem 0.6rem;text-align:center">' + r.dias + '</td>';
+        html += '<td style="padding:0.4rem 0.6rem;text-align:center;font-weight:700;color:' + pctColor + '">' + r.pct_cobertura + '%</td>';
+        html += '<td style="padding:0.4rem 0.6rem;text-align:center;font-size:1rem;color:' + estadoColor + '">' + estado + '</td>';
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function loadControlLineasDetalle(lote) {
+    var desde = document.getElementById('cl-desde').value;
+    var hasta = document.getElementById('cl-hasta').value;
+    var detailCard = document.getElementById('cl-detail-card');
+    var matrixContainer = document.getElementById('cl-matrix-container');
+    var title = document.getElementById('cl-detail-title');
+
+    detailCard.style.display = 'block';
+    title.textContent = 'Detalle Lote: ' + lote;
+    matrixContainer.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:2rem;font-size:0.85rem">Cargando matriz de lineas...</div>';
+
+    var url = API_URL + '?action=control_lineas_detalle&lote=' + encodeURIComponent(lote);
+    if (desde) url += '&desde=' + desde;
+    if (hasta) url += '&hasta=' + hasta;
+
+    fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                matrixContainer.innerHTML = '<div style="color:#ef4444;padding:1rem">' + data.error + '</div>';
+                return;
+            }
+            renderControlLineasMatrix(data, matrixContainer);
+        })
+        .catch(function(err) {
+            matrixContainer.innerHTML = '<div style="color:#ef4444;padding:1rem">Error: ' + err.message + '</div>';
+        });
+
+    detailCard.scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderControlLineasMatrix(data, container) {
+    var dates = data.dates || [];
+    var matrix = data.matrix || [];
+    var maxLinea = data.max_linea || 0;
+
+    if (maxLinea === 0 || dates.length === 0) {
+        container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:2rem">Sin datos de lineas para este lote</div>';
+        return;
+    }
+
+    function fmtDate(d) {
+        var parts = d.split('-');
+        return parts[2] + '/' + parts[1];
+    }
+
+    var stickyLine = 'padding:3px 6px;position:sticky;left:0;background:var(--card);z-index:1;font-weight:700;text-align:center;border:1px solid var(--border)';
+    var cellStyle = 'padding:3px 6px;text-align:center;min-width:32px;border:1px solid var(--border);font-size:0.7rem';
+
+    var html = '<table style="border-collapse:collapse;font-size:0.72rem">';
+
+    // Header
+    html += '<thead><tr>';
+    html += '<th style="' + stickyLine + ';background:var(--card);z-index:2">Linea</th>';
+    dates.forEach(function(d) {
+        html += '<th style="padding:3px 6px;text-align:center;border:1px solid var(--border);white-space:nowrap">' + fmtDate(d) + '</th>';
+    });
+    html += '<th style="padding:3px 6px;text-align:center;border:1px solid var(--border);font-weight:700">%</th>';
+    html += '</tr></thead><tbody>';
+
+    // Totals per date
+    var dateTotals = [];
+    dates.forEach(function() { dateTotals.push(0); });
+    var totalCovered = 0;
+
+    // Rows
+    for (var i = 0; i < maxLinea; i++) {
+        var row = matrix[i] || [];
+        var lineCovered = 0;
+        html += '<tr>';
+        html += '<td style="' + stickyLine + '">' + (i + 1) + '</td>';
+        for (var j = 0; j < dates.length; j++) {
+            var val = row[j] || 0;
+            if (val === 1) {
+                lineCovered++;
+                dateTotals[j]++;
+                html += '<td style="' + cellStyle + ';background:rgba(34,197,94,0.35);color:#4ade80">✓</td>';
+            } else {
+                html += '<td style="' + cellStyle + ';background:rgba(239,68,68,0.25);color:#f87171">✗</td>';
+            }
+        }
+        totalCovered += (lineCovered > 0 ? 1 : 0);
+        var linePct = dates.length > 0 ? Math.round(lineCovered / dates.length * 100) : 0;
+        var linePctColor = linePct >= 100 ? '#22c55e' : linePct >= 50 ? '#eab308' : '#ef4444';
+        html += '<td style="' + cellStyle + ';font-weight:700;color:' + linePctColor + '">' + linePct + '%</td>';
+        html += '</tr>';
+    }
+
+    // Footer totals
+    html += '<tr style="border-top:2px solid var(--border);font-weight:700">';
+    html += '<td style="' + stickyLine + '">Total</td>';
+    dates.forEach(function(d, idx) {
+        var pct = maxLinea > 0 ? Math.round(dateTotals[idx] / maxLinea * 100) : 0;
+        var color = pct >= 100 ? '#22c55e' : pct >= 80 ? '#eab308' : '#ef4444';
+        html += '<td style="' + cellStyle + ';color:' + color + '">' + dateTotals[idx] + '/' + maxLinea + '</td>';
+    });
+    var totalPct = maxLinea > 0 ? Math.round(totalCovered / maxLinea * 100) : 0;
+    html += '<td style="' + cellStyle + ';color:#22c55e">' + totalPct + '%</td>';
+    html += '</tr>';
+
+    html += '</tbody></table>';
+
+    // Summary
+    html += '<div style="margin-top:0.8rem;font-size:0.8rem;color:var(--text-muted)">';
+    html += 'Lote: <strong>' + data.lote + '</strong> | ';
+    html += 'Total lineas: <strong>' + maxLinea + '</strong> | ';
+    html += 'Lineas cubiertas: <strong style="color:#22c55e">' + totalCovered + '</strong> | ';
+    html += 'Faltantes: <strong style="color:#ef4444">' + (maxLinea - totalCovered) + '</strong>';
+    html += '</div>';
+
+    container.innerHTML = html;
+}
+
+// Hook into tab switching to lazy-load control lineas
+(function() {
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('tab') && e.target.getAttribute('data-tab') === 'control_lineas') {
+            setTimeout(initControlLineas, 50);
         }
     });
 })();
