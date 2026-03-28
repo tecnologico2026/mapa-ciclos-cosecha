@@ -609,17 +609,11 @@ function applyAPIData(laborKey, apiData) {
     DATA.lots.forEach(function(l) {
         var api = apiByName[l.lote];
         if (api) {
-            l.dias_ciclo = api.dias_ciclo;
+            // NO usar dias_ciclo de la hoja - solo auxiliar y ruta
             l.auxiliar = api.auxiliar || null;
             l.ruta = api.ruta || l.ruta || null;
-        } else {
-            l.dias_ciclo = null;
         }
     });
-    // Apply cierres immediately to override dias_ciclo from sheet
-    applyCierres();
-    ORIG_DIAS = {};
-    DATA.lots.forEach(function(l) { ORIG_DIAS[l.lote] = l.dias_ciclo; });
 
     // Fetch cierres too
     fetch(API_URL + '?action=cierres')
@@ -747,15 +741,11 @@ function applyLaborData(laborKey) {
         applyAPIData(laborKey, API_DATA[laborKey]);
         return;
     }
-    // Fallback to inlined cycles_db
+    // Fallback to inlined cycles_db - solo auxiliar/ruta, NO dias_ciclo
     var labor = CYCLES_DB[laborKey];
     if (!labor) return;
     DATA.lots.forEach(function(l) {
-        if (labor.datos[l.lote] !== undefined) {
-            l.dias_ciclo = labor.datos[l.lote];
-        } else {
-            l.dias_ciclo = null;
-        }
+        l.dias_ciclo = null; // dias_ciclo solo viene de CIERRES
         if (labor.auxiliares && labor.auxiliares[l.lote]) {
             l.auxiliar = labor.auxiliares[l.lote];
         }
