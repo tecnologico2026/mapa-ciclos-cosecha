@@ -620,13 +620,12 @@ function applyAPIData(laborKey, apiData) {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.cierres && data.cierres.length > 0) {
-                // Merge API cierres with historical + local (preserve local registros not yet in API)
+                // Use API cierres as source of truth
                 var localCierres = JSON.parse(localStorage.getItem('cierres') || '[]');
-                CIERRES = _RAW_CIERRES_HIST.slice();
+                CIERRES = [];
                 data.cierres.forEach(function(c) {
                     if (!c.tipo) c.tipo = 'CIERRE';
-                    var exists = CIERRES.some(function(h) { return h.lote === c.lote && h.tipo === c.tipo && h.fecha === c.fecha; });
-                    if (!exists) CIERRES.push(c);
+                    CIERRES.push(c);
                 });
                 // Re-add local registros that are not in API yet
                 localCierres.forEach(function(c) {
