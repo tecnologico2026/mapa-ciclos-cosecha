@@ -4776,6 +4776,7 @@ function renderCargaTable(floresData, areasData, container) {
         html += '<th colspan="2" style="' + hdrBot + ';text-align:center;border-left:1px solid var(--border)">' + fmtDate(f) + '</th>';
     });
     html += '<th colspan="2" style="' + hdrBot + ';text-align:center;border-left:2px solid var(--border);color:#22c55e">Total</th>';
+    html += '<th colspan="2" style="' + hdrBot + ';text-align:center;border-left:2px solid var(--border);color:#f97316">Promedio</th>';
     html += '</tr>';
 
     // Header row 2: Flores / Area sub-headers
@@ -4784,6 +4785,8 @@ function renderCargaTable(floresData, areasData, container) {
         html += '<th style="padding:0.25rem 0.3rem;text-align:right;border-bottom:1px solid var(--border);color:#818cf8;font-size:0.65rem;border-left:1px solid var(--border)">Flores</th>';
         html += '<th style="padding:0.25rem 0.3rem;text-align:right;border-bottom:1px solid var(--border);color:#f59e0b;font-size:0.65rem">Área</th>';
     });
+    html += '<th style="padding:0.25rem 0.3rem;text-align:right;border-bottom:1px solid var(--border);color:#818cf8;font-size:0.65rem;border-left:2px solid var(--border)">Flores</th>';
+    html += '<th style="padding:0.25rem 0.3rem;text-align:right;border-bottom:1px solid var(--border);color:#f59e0b;font-size:0.65rem">Área</th>';
     html += '<th style="padding:0.25rem 0.3rem;text-align:right;border-bottom:1px solid var(--border);color:#818cf8;font-size:0.65rem;border-left:2px solid var(--border)">Flores</th>';
     html += '<th style="padding:0.25rem 0.3rem;text-align:right;border-bottom:1px solid var(--border);color:#f59e0b;font-size:0.65rem">Área</th>';
     html += '</tr></thead><tbody>';
@@ -4809,8 +4812,14 @@ function renderCargaTable(floresData, areasData, container) {
         });
         gTotalFlores += emp.totalFlores;
         gTotalArea += emp.totalArea;
+        var diasFlores = 0, diasArea = 0;
+        fechas.forEach(function(f) { var d = emp.fechas[f]; if (d && d.flores > 0) diasFlores++; if (d && d.area > 0) diasArea++; });
+        var promFlores = diasFlores ? Math.round(emp.totalFlores / diasFlores) : 0;
+        var promArea = diasArea ? emp.totalArea / diasArea : 0;
         html += '<td style="' + cellR + ';border-left:2px solid var(--border);font-weight:700;color:#818cf8">' + fmtNum(emp.totalFlores, 0) + '</td>';
         html += '<td style="' + cellR + ';font-weight:700;color:#f59e0b">' + fmtNum(emp.totalArea, 2) + '</td>';
+        html += '<td style="' + cellR + ';border-left:2px solid var(--border);color:#818cf8">' + fmtNum(promFlores, 0) + '</td>';
+        html += '<td style="' + cellR + ';color:#f59e0b">' + fmtNum(promArea, 2) + '</td>';
         html += '</tr>';
     });
 
@@ -4847,6 +4856,8 @@ function renderCargaTable(floresData, areasData, container) {
     });
     html += '<td style="' + sValStyle + 'border-left:2px solid var(--border)">' + fmtNum(gTotalFlores, 0) + '</td>';
     html += '<td style="' + sValStyle + '"></td>';
+    html += '<td style="' + sValStyle + 'border-left:2px solid var(--border)"></td>';
+    html += '<td style="' + sValStyle + '"></td>';
     html += '</tr>';
 
     // Promedio Flores
@@ -4861,6 +4872,8 @@ function renderCargaTable(floresData, areasData, container) {
     var promFloresTot = totalEmpsConFlores ? Math.round(gTotalFlores / totalEmpsConFlores) : 0;
     html += '<td style="' + sValStyle + 'border-left:2px solid var(--border)">' + fmtNum(promFloresTot, 0) + '</td>';
     html += '<td style="' + sValStyle + '"></td>';
+    html += '<td style="' + sValStyle + 'border-left:2px solid var(--border)"></td>';
+    html += '<td style="' + sValStyle + '"></td>';
     html += '</tr>';
 
     // Total Hectáreas
@@ -4873,6 +4886,8 @@ function renderCargaTable(floresData, areasData, container) {
     });
     html += '<td style="' + sValStyle + 'border-left:2px solid var(--border)"></td>';
     html += '<td style="' + sValStyle + '">' + fmtNum(gTotalArea, 2) + '</td>';
+    html += '<td style="' + sValStyle + 'border-left:2px solid var(--border)"></td>';
+    html += '<td style="' + sValStyle + '"></td>';
     html += '</tr>';
 
     // Promedio Hectáreas
@@ -4887,6 +4902,8 @@ function renderCargaTable(floresData, areasData, container) {
     var promAreaTot = totalEmpsConArea ? gTotalArea / totalEmpsConArea : 0;
     html += '<td style="' + sValStyle + 'border-left:2px solid var(--border)"></td>';
     html += '<td style="' + sValStyle + '">' + fmtNum(promAreaTot, 2) + '</td>';
+    html += '<td style="' + sValStyle + 'border-left:2px solid var(--border)"></td>';
+    html += '<td style="' + sValStyle + '"></td>';
     html += '</tr>';
 
     html += '</tbody></table>';
