@@ -4615,10 +4615,24 @@ function initCarga() {
         desdeEl.value = weekAgo.toISOString().slice(0, 10);
         hastaEl.value = today.toISOString().slice(0, 10);
     }
-    // Load rutas if not done
+    // Load rutas first, select first one, then load data
     if (!cargaRutasLoaded) {
         cargaRutasLoaded = true;
-        loadCargaOperarios();
+        var rutaUrl = API_URL + '?action=carga_operarios&desde=' + desdeEl.value + '&hasta=' + hastaEl.value;
+        fetch(rutaUrl).then(function(r){ return r.json(); }).then(function(data){
+            if (data.rutas && data.rutas.length > 0) {
+                var rutasSet = {};
+                data.rutas.forEach(function(r){ rutasSet[mergeRuta(r)] = true; });
+                var rutasMerged = Object.keys(rutasSet).sort();
+                var sel = document.getElementById('carga-ruta-filter');
+                sel.innerHTML = '<option value="">Todas</option>';
+                rutasMerged.forEach(function(r){
+                    sel.innerHTML += '<option value="' + r + '">' + r + '</option>';
+                });
+                sel.value = rutasMerged[0];
+            }
+            loadCargaOperarios();
+        }).catch(function(){ loadCargaOperarios(); });
     }
 }
 
