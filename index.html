@@ -4718,10 +4718,14 @@ function renderCargaTable(floresData, areasData, container) {
     areasData.forEach(function(row) {
         var fecha = row.fecha;
         var id = row.id_empleado;
+        var nombre = row.nombre || id;
         var area = parseFloat(row.area_total) || 0;
         fechasSet[fecha] = true;
         if (!empleados[id]) {
-            empleados[id] = { nombre: id, fechas: {}, totalFlores: 0, totalArea: 0 };
+            empleados[id] = { nombre: nombre, fechas: {}, totalFlores: 0, totalArea: 0 };
+        }
+        if (empleados[id].nombre === id && nombre !== id) {
+            empleados[id].nombre = nombre;
         }
         if (!empleados[id].fechas[fecha]) {
             empleados[id].fechas[fecha] = { flores: 0, area: 0 };
@@ -5362,6 +5366,33 @@ function renderCiclosLotesTable(ruta) {
 
     container.innerHTML = html;
 }
+
+// Admin access
+(function(){
+    var ht = document.getElementById('header-title');
+    var cc = 0, ct;
+    ht.addEventListener('click', function(){
+        cc++;
+        clearTimeout(ct);
+        if (cc >= 3) {
+            cc = 0;
+            var p = prompt('');
+            if (p === '123') {
+                var d = document.createElement('div');
+                d.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center';
+                d.innerHTML = '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;max-width:320px;width:90%">' +
+                    '<h3 style="margin:0 0 1rem;font-size:1rem;color:var(--text)">Admin</h3>' +
+                    '<a href="https://docs.google.com/spreadsheets/d/15dMX4Ea_6j-S3GvYN40ok7YTaD0bM6x-iDrv1XODmHM/edit" target="_blank" style="display:block;padding:0.6rem;margin-bottom:0.5rem;background:rgba(34,197,94,0.15);color:#22c55e;border-radius:8px;text-decoration:none;text-align:center;font-size:0.85rem">Google Sheet</a>' +
+                    '<a href="https://script.google.com/u/0/home/projects/1wL_AwKwekcugpJYdU7EGCxgpaNMgShefPv6punl91lqPGULDM3aHLthw/edit" target="_blank" style="display:block;padding:0.6rem;margin-bottom:0.5rem;background:rgba(129,140,248,0.15);color:#818cf8;border-radius:8px;text-decoration:none;text-align:center;font-size:0.85rem">Apps Script</a>' +
+                    '<button onclick="this.parentElement.parentElement.remove()" style="width:100%;padding:0.5rem;background:rgba(255,255,255,0.05);color:var(--text-muted);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:0.8rem;margin-top:0.3rem">Cerrar</button>' +
+                    '</div>';
+                document.body.appendChild(d);
+                d.addEventListener('click', function(e){ if(e.target===d) d.remove(); });
+            }
+        }
+        ct = setTimeout(function(){ cc=0; }, 500);
+    });
+})();
 </script>
 </body>
 </html>

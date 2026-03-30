@@ -513,11 +513,12 @@ function getCargaOperarios(desde, hasta, ruta) {
 
     // Area from Ejecucion_Polinizacion
     var areas = dbQuery(
-      'SELECT ep.id_empleado, ep.Ruta, ep.fecha, ' +
+      'SELECT ep.id_empleado, e.nombre as nombre, ep.Ruta, ep.fecha, ' +
       'SUM(CAST(ep.area_total AS DECIMAL(10,2))) as area_total ' +
       'FROM Ejecucion_Polinizacion ep ' +
+      'LEFT JOIN Empleado e ON ep.id_empleado = e.id_empleado ' +
       whereEP + ' ' +
-      'GROUP BY ep.id_empleado, ep.Ruta, ep.fecha ' +
+      'GROUP BY ep.id_empleado, e.nombre, ep.Ruta, ep.fecha ' +
       'ORDER BY ep.id_empleado, ep.fecha'
     );
 
