@@ -23,7 +23,9 @@
             <label>Hasta:</label>
             <input type="date" id="cl-hasta">
             <label>Ruta:</label>
-            <select id="cl-ruta-filter"><option value="">Todas</option></select>
+            <select id="cl-ruta-filter" onchange="populateLotes()"><option value="">Todas</option></select>
+            <label>Lote:</label>
+            <select id="cl-lote-filter"><option value="">Todos</option></select>
             <button class="btn-primary" onclick="loadResumen()">Consultar</button>
         </div>
         <div class="card">
@@ -36,7 +38,10 @@
         </div>
     </div>
 <script>
-var API_URL = 'https://script.google.com/macros/s/AKfycbxeTyNICdW_OsvdnyDwFTKo-Iy7oa_Qa-kMqwPbUdTMLkezveLUgYa4qceDFKgXBWI4/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbyamkGKurq-aI_g4jU8OFlvrSD2bAHuM3u7LY_iHvG5aVr10kVrqOJyadskdwjzsiv3/exec';
+
+var LOTES_POR_RUTA = {};
+var lastResumen = [];
 
 (function() {
     var today = new Date();
@@ -49,6 +54,14 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbxeTyNICdW_OsvdnyDwFTKo-I
     sel.value = RUTAS[0];
     loadResumen();
 })();
+
+function populateLotes() {
+    var ruta = document.getElementById('cl-ruta-filter').value;
+    var sel = document.getElementById('cl-lote-filter');
+    sel.innerHTML = '<option value="">Todos</option>';
+    var lotes = (LOTES_POR_RUTA[ruta] || []).sort();
+    lotes.forEach(function(l) { sel.innerHTML += '<option value="' + l + '">' + l + '</option>'; });
+}
 
 function loadResumen() {
     var desde = document.getElementById('cl-desde').value;
@@ -70,7 +83,16 @@ function loadResumen() {
             data.rutas.forEach(function(r) { sel.innerHTML += '<option value="' + r + '"' + (r === cur ? ' selected' : '') + '>' + r + '</option>'; });
         }
         if (!data.resumen || data.resumen.length === 0) { container.innerHTML = '<div class="loading">Sin datos para el rango seleccionado</div>'; return; }
-        renderResumen(data.resumen, container);
+        lastResumen = data.resumen;
+        LOTES_POR_RUTA = {};
+        data.resumen.forEach(function(r) {
+            if (!LOTES_POR_RUTA[r.ruta]) LOTES_POR_RUTA[r.ruta] = [];
+            LOTES_POR_RUTA[r.ruta].push(r.lote);
+        });
+        populateLotes();
+        var loteFilter = document.getElementById('cl-lote-filter').value;
+        var filtered = loteFilter ? data.resumen.filter(function(r) { return r.lote === loteFilter; }) : data.resumen;
+        renderResumen(filtered, container);
     }).catch(function(err) { container.innerHTML = '<div class="error">Error: ' + err.message + '</div>'; });
 }
 

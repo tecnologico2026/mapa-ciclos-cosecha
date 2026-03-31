@@ -76,6 +76,15 @@ function doGet(e) {
     var desde = e.parameter.desde || '';
     var hasta = e.parameter.hasta || '';
     result = getControlLineasDetalle(lote, desde, hasta);
+  } else if (action === 'fix_ruta_liquida') {
+    var pwd = e.parameter.pwd || '';
+    if (pwd !== '123') {
+      result = { error: 'No autorizado' };
+    } else {
+      var antes = dbQuery("SELECT COUNT(*) as total FROM Carga_CT WHERE ruta = 'CASA ZINC-LIQUIDA' AND fecha >= '2026-01-28' AND id_lote != '04F02'");
+      var update = dbQuery("UPDATE Carga_CT SET ruta = 'CASA ZINC-POLVO' WHERE ruta = 'CASA ZINC-LIQUIDA' AND fecha >= '2026-01-28' AND id_lote != '04F02'");
+      result = { ok: true, registros_afectados: antes.rows[0].total, update: update };
+    }
   } else if (action === 'sheet_info') {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     result = { name: ss.getName(), url: ss.getUrl(), id: ss.getId() };
@@ -547,57 +556,48 @@ function getControlLineasResumen(desde, hasta, ruta) {
       return { error: 'Fechas requeridas en formato yyyy-MM-dd' };
     }
 
-    var lineaInfo = dbQuery(
-      'SELECT lp.id_lote, MAX(CAST(lp.linea AS SIGNED)) as max_linea, ' +
-      'SUM(CAST(lp.numero_palmas AS SIGNED)) as total_palmas ' +
-      'FROM Linea_Palma lp GROUP BY lp.id_lote'
-    );
-    var lineaMap = {};
-    lineaInfo.rows.forEach(function(r) {
-      lineaMap[r.id_lote] = { max_linea: parseInt(r.max_linea) || 0, total_palmas: parseInt(r.total_palmas) || 0 };
-    });
-
     var where = 'WHERE ep.fecha >= "' + desde + '" AND ep.fecha <= "' + hasta + '"';
     where += ' AND ep.Ruta IS NOT NULL AND ep.Ruta != ""';
     if (ruta) {
       var cleanRuta = ruta.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ %._-]/g, '');
       where += ' AND ep.Ruta = "' + cleanRuta + '"';
     }
-    var epData = dbQuery(
-      'SELECT ep.id_lote, ep.fecha, CAST(ep.linea_inicial AS SIGNED) as li, ' +
-      'CAST(ep.linea_final AS SIGNED) as lf, ep.Ruta ' +
-      'FROM Ejecucion_Polinizacion ep ' + where +
-      ' ORDER BY ep.id_lote, ep.fecha'
-    );
 
-    var lotes = {};
-    epData.rows.forEach(function(r) {
-      var lote = r.id_lote;
-      if (!lotes[lote]) {
-        var info = lineaMap[lote] || { max_linea: 0, total_palmas: 0 };
-        lotes[lote] = { ruta: r.Ruta, max_linea: info.max_linea, total_palmas: info.total_palmas, fechas: {}, lineas_cubiertas: {} };
-      }
-      lotes[lote].fechas[r.fecha] = true;
-      var li = parseInt(r.li) || 0;
-      var lf = parseInt(r.lf) || 0;
-      for (var l = li; l <= lf; l++) {
-        lotes[lote].lineas_cubiertas[l] = true;
-      }
-    });
+    var data = dbQuery(
+      'SELECT ep.id_lote, ep.Ruta, ' +
+      'COUNT(DISTINCT ep.fecha) as dias, ' +
+      'GROUP_CONCAT(DISTINCT CONCAT(CAST(ep.linea_inicial AS SIGNED), "-", CAST(ep.linea_final AS SIGNED))) as rangos, ' +
+      'lp.max_linea, lp.total_palmas ' +
+      'FROM Ejecucion_Polinizacion ep ' +
+      'JOIN (SELECT id_lote, MAX(CAST(linea AS SIGNED)) as max_linea, ' +
+      'SUM(CAST(numero_palmas AS SIGNED)) as total_palmas FROM Linea_Palma GROUP BY id_lote) lp ' +
+      'ON lp.id_lote = ep.id_lote ' +
+      where +
+      ' GROUP BY ep.id_lote, ep.Ruta, lp.max_linea, lp.total_palmas' +
+      ' ORDER BY ep.Ruta, ep.id_lote'
+    );
 
     var resumen = [];
     var rutasSet = {};
-    Object.keys(lotes).forEach(function(lote) {
-      var d = lotes[lote];
-      var cubiertas = Object.keys(d.lineas_cubiertas).length;
-      var pct = d.max_linea > 0 ? Math.round(cubiertas / d.max_linea * 1000) / 10 : 0;
+    data.rows.forEach(function(r) {
+      var maxLinea = parseInt(r.max_linea) || 0;
+      var lineasCubiertas = {};
+      if (r.rangos) {
+        r.rangos.split(',').forEach(function(rango) {
+          var parts = rango.split('-');
+          var li = parseInt(parts[0]) || 0;
+          var lf = parseInt(parts[1]) || li;
+          for (var l = li; l <= lf; l++) lineasCubiertas[l] = true;
+        });
+      }
+      var cubiertas = Object.keys(lineasCubiertas).length;
+      var pct = maxLinea > 0 ? Math.round(cubiertas / maxLinea * 1000) / 10 : 0;
       resumen.push({
-        lote: lote, ruta: d.ruta, max_linea: d.max_linea, total_palmas: d.total_palmas,
-        dias: Object.keys(d.fechas).length, lineas_cubiertas: cubiertas, pct_cobertura: pct
+        lote: r.id_lote, ruta: r.Ruta, max_linea: maxLinea, total_palmas: parseInt(r.total_palmas) || 0,
+        dias: parseInt(r.dias) || 0, lineas_cubiertas: cubiertas, pct_cobertura: pct
       });
-      if (d.ruta) rutasSet[d.ruta] = true;
+      if (r.Ruta) rutasSet[r.Ruta] = true;
     });
-    resumen.sort(function(a, b) { return a.ruta.localeCompare(b.ruta) || a.lote.localeCompare(b.lote); });
 
     return { resumen: resumen, rutas: Object.keys(rutasSet).sort() };
   } catch(e) {
@@ -613,21 +613,19 @@ function getControlLineasDetalle(lote, desde, hasta) {
     }
     var cleanLote = lote.replace(/[^a-zA-Z0-9]/g, '');
 
-    var lineaInfo = dbQuery(
-      'SELECT MAX(CAST(linea AS SIGNED)) as max_linea FROM Linea_Palma WHERE id_lote = "' + cleanLote + '"'
-    );
-    var maxLinea = parseInt(lineaInfo.rows[0].max_linea) || 0;
-
-    var epData = dbQuery(
-      'SELECT fecha, CAST(linea_inicial AS SIGNED) as li, CAST(linea_final AS SIGNED) as lf, id_empleado ' +
-      'FROM Ejecucion_Polinizacion ' +
-      'WHERE id_lote = "' + cleanLote + '" AND fecha >= "' + desde + '" AND fecha <= "' + hasta + '" ' +
-      'ORDER BY fecha, linea_inicial'
+    var data = dbQuery(
+      'SELECT ep.fecha, CAST(ep.linea_inicial AS SIGNED) as li, CAST(ep.linea_final AS SIGNED) as lf, ' +
+      'lp.max_linea ' +
+      'FROM Ejecucion_Polinizacion ep ' +
+      'JOIN (SELECT MAX(CAST(linea AS SIGNED)) as max_linea FROM Linea_Palma WHERE id_lote = "' + cleanLote + '") lp ON 1=1 ' +
+      'WHERE ep.id_lote = "' + cleanLote + '" AND ep.fecha >= "' + desde + '" AND ep.fecha <= "' + hasta + '" ' +
+      'ORDER BY ep.fecha, ep.linea_inicial'
     );
 
+    var maxLinea = data.rows.length > 0 ? (parseInt(data.rows[0].max_linea) || 0) : 0;
     var fechasSet = {};
     var coverage = {};
-    epData.rows.forEach(function(r) {
+    data.rows.forEach(function(r) {
       fechasSet[r.fecha] = true;
       if (!coverage[r.fecha]) coverage[r.fecha] = {};
       var li = parseInt(r.li) || 0;

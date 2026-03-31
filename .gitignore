@@ -37,6 +37,16 @@ shape2/
 # Windows Zone.Identifier files
 *:Zone.Identifier
 
+# Sensitive / credentials
+.env
+.env.*
+*.secret
+credentials.*
+
+# Logs and transcripts
+*.txt
+*.log
+
 # Misc
 _inline_cierres.txt
 verify_map.html
