@@ -5042,6 +5042,17 @@ function initControlLineas() {
     }
     if (!_clLoaded) {
         _clLoaded = true;
+        var rutasSet = {};
+        DATA.lots.forEach(function(l) {
+            if (l.ruta) rutasSet[l.ruta] = true;
+        });
+        var rutasList = Object.keys(rutasSet).sort();
+        var sel = document.getElementById('cl-ruta-filter');
+        sel.innerHTML = '<option value="">Todas</option>';
+        rutasList.forEach(function(r) {
+            sel.innerHTML += '<option value="' + r + '">' + r + '</option>';
+        });
+        if (rutasList.length > 0) sel.value = rutasList[0];
         loadControlLineasResumen();
     }
 }
