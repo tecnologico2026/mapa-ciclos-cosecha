@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carga CT - Polinizacion</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1><a href="/polinizacion/">Agronomia</a> / Polinizacion</h1>
+    </header>
+    <nav class="site-nav">
+        <a href="/index.html">Mapa</a>
+        <a href="/polinizacion/carga.html" class="active">Carga CT</a>
+        <a href="/polinizacion/control-lineas.html">Control Lineas</a>
+        <a href="/polinizacion/consumo.html">Consumo</a>
+    </nav>
+    <div class="main">
+        <div class="filter-bar">
+            <label>Desde:</label>
+            <input type="date" id="desde">
+            <label>Hasta:</label>
+            <input type="date" id="hasta">
+            <label>Ruta:</label>
+            <select id="ruta-filter"><option value="">Todas</option></select>
+            <button class="btn-primary" onclick="loadData()">Consultar</button>
+            <button class="btn-secondary" onclick="exportPDF()">Descargar PDF</button>
+        </div>
+        <div class="card">
+            <h2>Carga por Operario</h2>
+            <div id="table-container" style="overflow-x:auto">
+                <div class="loading">Selecciona ruta y rango de fechas</div>
+            </div>
+        </div>
+    </div>
+<script>
+var API_URL = 'https://script.google.com/macros/s/AKfycbxeTyNICdW_OsvdnyDwFTKo-Iy7oa_Qa-kMqwPbUdTMLkezveLUgYa4qceDFKgXBWI4/exec';
+var RUTAS_MERGE = { '2017': '2017-CAMBULOS', 'CAMBULO': '2017-CAMBULOS', 'CAMBULOS': '2017-CAMBULOS' };
+function mergeRuta(r) { return RUTAS_MERGE[r] || RUTAS_MERGE[(r||'').toUpperCase()] || r; }
+
+(function() {
+    var today = new Date();
+    var weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
+    document.getElementById('desde').value = weekAgo.toISOString().slice(0, 10);
+    document.getElementById('hasta').value = today.toISOString().slice(0, 10);
+})();
+
+// Load rutas from Apps Script
+fetch(API_URL + '?action=carga_operarios&desde=2026-01-01&hasta=2026-01-01').then(function(r){return r.json();}).then(function(data) {
+    if (!data.rutas) return;
+    var sel = document.getElementById('ruta-filter');
+    var rutasSet = {};
+    data.rutas.forEach(function(r) { rutasSet[mergeRuta(r)] = true; });
+    var merged = Object.keys(rutasSet).sort();
+    merged.forEach(function(r) { sel.innerHTML += '<option value="' + r + '">' + r + '</option>'; });
+    if (merged.length > 0) { sel.value = merged[0]; loadData(); }
+});
+
+function loadData() {
+    var desde = document.getElementById('desde').value;
+    var hasta = document.getElementById('hasta').value;
+    var rutaSel = document.getElementById('ruta-filter').value;
+    var container = document.getElementById('table-container');
+    container.innerHTML = '<div class="loading">Cargando...</div>';
+
+    var isMerged = rutaSel && Object.values(RUTAS_MERGE).indexOf(rutaSel) !== -1;
+    var url = API_URL + '?action=carga_operarios&desde=' + desde + '&hasta=' + hasta;
+    if (rutaSel && !isMerged) url += '&ruta=' + encodeURIComponent(rutaSel);
+
+    fetch(url).then(function(r){return r.json();}).then(function(data) {
+        if (data.error) { container.innerHTML = '<div class="error">' + data.error + '</div>'; return; }
+        var flores = data.flores || [], areas = data.areas || [];
+        flores.forEach(function(r) { r.ruta = mergeRuta(r.ruta || ''); });
+        areas.forEach(function(r) { r.Ruta = mergeRuta(r.Ruta || ''); });
+        if (isMerged) {
+            flores = flores.filter(function(r) { return r.ruta === rutaSel; });
+            areas = areas.filter(function(r) { return r.Ruta === rutaSel; });
+        }
+        // Update rutas filter
+        if (data.rutas && data.rutas.length > 0) {
+            var rutasSet = {};
+            data.rutas.forEach(function(r) { rutasSet[mergeRuta(r)] = true; });
+            var merged = Object.keys(rutasSet).sort();
+            var sel = document.getElementById('ruta-filter');
+            var cur = sel.value;
+            sel.innerHTML = '<option value="">Todas</option>';
+            merged.forEach(function(r) { sel.innerHTML += '<option value="' + r + '"' + (r === cur ? ' selected' : '') + '>' + r + '</option>'; });
+        }
+        if (flores.length === 0 && areas.length === 0) { container.innerHTML = '<div class="loading">Sin datos para el rango seleccionado</div>'; return; }
+        renderTable(flores, areas, container);
+    }).catch(function(err) { container.innerHTML = '<div class="error">Error: ' + err.message + '</div>'; });
+}
+
+function renderTable(floresData, areasData, container) {
+    var fechasSet = {}, empleados = {};
+    floresData.forEach(function(row) {
+        var fecha = row.fecha, id = row.id_empleado, nombre = row.nombre || row.Nombre || id;
+        var flores = parseInt(row.flores_totales) || 0;
+        fechasSet[fecha] = true;
+        if (!empleados[id]) empleados[id] = { nombre: nombre, fechas: {}, totalFlores: 0, totalArea: 0 };
+        if (!empleados[id].fechas[fecha]) empleados[id].fechas[fecha] = { flores: 0, area: 0 };
+        empleados[id].fechas[fecha].flores += flores;
+        empleados[id].totalFlores += flores;
+    });
+    areasData.forEach(function(row) {
+        var fecha = row.fecha, id = row.id_empleado, nombre = row.nombre || row.Nombre || id;
+        var area = parseFloat(row.area_total) || 0;
+        fechasSet[fecha] = true;
+        if (!empleados[id]) empleados[id] = { nombre: nombre, fechas: {}, totalFlores: 0, totalArea: 0 };
+        if (empleados[id].nombre === id && nombre !== id) empleados[id].nombre = nombre;
+        if (!empleados[id].fechas[fecha]) empleados[id].fechas[fecha] = { flores: 0, area: 0 };
+        empleados[id].fechas[fecha].area += area;
+        empleados[id].totalArea += area;
+    });
+
+    var fechas = Object.keys(fechasSet).sort();
+    var empIds = Object.keys(empleados).sort();
+    function fmtDate(d) { var p = d.split('-'); return p[2] + '/' + p[1]; }
+    function fmtNum(v, dec) { if (v === 0) return '-'; return dec ? v.toFixed(dec).replace('.', ',') : v.toLocaleString('es'); }
+
+    var sC = 'padding:0.35rem 0.4rem;position:sticky;left:0;background:var(--card);z-index:1';
+    var sN = 'padding:0.35rem 0.4rem;position:sticky;left:60px;background:var(--card);z-index:1';
+    var cR = 'padding:0.35rem 0.4rem;text-align:right;font-variant-numeric:tabular-nums';
+    var hB = 'padding:0.4rem;text-align:right;border-bottom:2px solid var(--border);white-space:nowrap';
+
+    var html = '<table style="width:100%;border-collapse:collapse;font-size:0.72rem"><thead>';
+    html += '<tr style="background:rgba(255,255,255,0.05)">';
+    html += '<th rowspan="2" style="' + hB + ';text-align:left;position:sticky;left:0;background:var(--card);z-index:2">Codigo</th>';
+    html += '<th rowspan="2" style="' + hB + ';text-align:left;position:sticky;left:60px;background:var(--card);z-index:2">Nombre</th>';
+    fechas.forEach(function(f) { html += '<th colspan="2" style="' + hB + ';text-align:center;border-left:1px solid var(--border)">' + fmtDate(f) + '</th>'; });
+    html += '<th colspan="2" style="' + hB + ';text-align:center;border-left:2px solid var(--border);color:#22c55e">Total</th>';
+    html += '<th colspan="2" style="' + hB + ';text-align:center;border-left:2px solid var(--border);color:#f97316">Promedio</th>';
+    html += '</tr><tr style="background:rgba(255,255,255,0.03)">';
+    fechas.forEach(function() {
+        html += '<th style="padding:0.25rem 0.3rem;text-align:right;border-bottom:1px solid var(--border);color:#818cf8;font-size:0.65rem;border-left:1px solid var(--border)">Flores</th>';
+        html += '<th style="padding:0.25rem 0.3rem;text-align:right;border-bottom:1px solid var(--border);color:#f59e0b;font-size:0.65rem">Area</th>';
+    });
+    ['#818cf8','#f59e0b','#818cf8','#f59e0b'].forEach(function(c,i) {
+        html += '<th style="padding:0.25rem 0.3rem;text-align:right;border-bottom:1px solid var(--border);color:' + c + ';font-size:0.65rem;border-left:' + (i%2===0?'2':'0') + 'px solid var(--border)">' + (i%2===0?'Flores':'Area') + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    var gFlores = {}, gArea = {};
+    fechas.forEach(function(f) { gFlores[f] = 0; gArea[f] = 0; });
+    var gTotalFlores = 0, gTotalArea = 0;
+
+    empIds.forEach(function(id) {
+        var emp = empleados[id], diasF = 0, diasA = 0;
+        html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05)">';
+        html += '<td style="' + sC + ';font-weight:600">' + id + '</td>';
+        html += '<td style="' + sN + ';color:var(--text-muted)">' + emp.nombre + '</td>';
+        fechas.forEach(function(f) {
+            var d = emp.fechas[f] || { flores: 0, area: 0 };
+            gFlores[f] += d.flores; gArea[f] += d.area;
+            if (d.flores > 0) diasF++; if (d.area > 0) diasA++;
+            html += '<td style="' + cR + ';border-left:1px solid var(--border);' + (d.flores===0?'color:rgba(255,255,255,0.15)':'color:#818cf8') + '">' + fmtNum(d.flores, 0) + '</td>';
+            html += '<td style="' + cR + ';' + (d.area===0?'color:rgba(255,255,255,0.15)':'color:#f59e0b') + '">' + fmtNum(d.area, 2) + '</td>';
+        });
+        gTotalFlores += emp.totalFlores; gTotalArea += emp.totalArea;
+        var pF = diasF ? Math.round(emp.totalFlores / diasF) : 0;
+        var pA = diasA ? emp.totalArea / diasA : 0;
+        html += '<td style="' + cR + ';border-left:2px solid var(--border);font-weight:700;color:#818cf8">' + fmtNum(emp.totalFlores, 0) + '</td>';
+        html += '<td style="' + cR + ';font-weight:700;color:#f59e0b">' + fmtNum(emp.totalArea, 2) + '</td>';
+        html += '<td style="' + cR + ';border-left:2px solid var(--border);color:#818cf8">' + fmtNum(pF, 0) + '</td>';
+        html += '<td style="' + cR + ';color:#f59e0b">' + fmtNum(pA, 2) + '</td>';
+        html += '</tr>';
+    });
+
+    // Summary
+    var sS = 'padding:0.35rem 0.4rem;font-size:0.75rem;';
+    var sV = sS + 'text-align:right;font-weight:700;font-variant-numeric:tabular-nums;';
+    var empsF = {}, empsA = {}, tEF = 0, tEA = 0;
+    fechas.forEach(function(f) { empsF[f] = 0; empsA[f] = 0; });
+    empIds.forEach(function(id) {
+        var hF = false, hA = false;
+        fechas.forEach(function(f) { var d = empleados[id].fechas[f]; if (d && d.flores > 0) { empsF[f]++; hF = true; } if (d && d.area > 0) { empsA[f]++; hA = true; } });
+        if (hF) tEF++; if (hA) tEA++;
+    });
+    var empty2 = '<td style="' + sV + 'border-left:2px solid var(--border)"></td><td style="' + sV + '"></td>';
+
+    html += '<tr style="border-top:1px solid var(--border)"><td style="' + sS + 'position:sticky;left:0;background:var(--card)">Total Flores</td><td style="' + sS + 'position:sticky;left:60px;background:var(--card)"></td>';
+    fechas.forEach(function(f) { html += '<td style="' + sV + 'border-left:1px solid var(--border)">' + fmtNum(gFlores[f], 0) + '</td><td style="' + sV + '"></td>'; });
+    html += '<td style="' + sV + 'border-left:2px solid var(--border)">' + fmtNum(gTotalFlores, 0) + '</td><td style="' + sV + '"></td>' + empty2 + '</tr>';
+
+    html += '<tr><td style="' + sS + 'position:sticky;left:0;background:var(--card)">Promedio Flores</td><td style="' + sS + 'position:sticky;left:60px;background:var(--card)"></td>';
+    fechas.forEach(function(f) { var p = empsF[f] ? Math.round(gFlores[f]/empsF[f]) : 0; html += '<td style="' + sV + 'border-left:1px solid var(--border)">' + fmtNum(p, 0) + '</td><td style="' + sV + '"></td>'; });
+    var pFT = tEF ? Math.round(gTotalFlores/tEF) : 0;
+    html += '<td style="' + sV + 'border-left:2px solid var(--border)">' + fmtNum(pFT, 0) + '</td><td style="' + sV + '"></td>' + empty2 + '</tr>';
+
+    html += '<tr style="border-top:1px solid var(--border)"><td style="' + sS + 'position:sticky;left:0;background:var(--card)">Total Hectareas</td><td style="' + sS + 'position:sticky;left:60px;background:var(--card)"></td>';
+    fechas.forEach(function(f) { html += '<td style="' + sV + 'border-left:1px solid var(--border)"></td><td style="' + sV + '">' + fmtNum(gArea[f], 2) + '</td>'; });
+    html += '<td style="' + sV + 'border-left:2px solid var(--border)"></td><td style="' + sV + '">' + fmtNum(gTotalArea, 2) + '</td>' + empty2 + '</tr>';
+
+    html += '<tr><td style="' + sS + 'position:sticky;left:0;background:var(--card)">Promedio Hectareas</td><td style="' + sS + 'position:sticky;left:60px;background:var(--card)"></td>';
+    fechas.forEach(function(f) { var p = empsA[f] ? gArea[f]/empsA[f] : 0; html += '<td style="' + sV + 'border-left:1px solid var(--border)"></td><td style="' + sV + '">' + fmtNum(p, 2) + '</td>'; });
+    var pAT = tEA ? gTotalArea/tEA : 0;
+    html += '<td style="' + sV + 'border-left:2px solid var(--border)"></td><td style="' + sV + '">' + fmtNum(pAT, 2) + '</td>' + empty2 + '</tr>';
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function exportPDF() {
+    var table = document.querySelector('#table-container table');
+    if (!table) { alert('No hay datos'); return; }
+    var { jsPDF } = window.jspdf;
+    var desde = document.getElementById('desde').value;
+    var hasta = document.getElementById('hasta').value;
+    var ruta = document.getElementById('ruta-filter').value || 'Todas';
+    var doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    doc.setFontSize(14); doc.text('Carga por Operario', 14, 15);
+    doc.setFontSize(9); doc.text('Ruta: ' + ruta + '  |  Desde: ' + desde + '  |  Hasta: ' + hasta, 14, 21);
+    doc.autoTable({ html: table, startY: 25, styles: { fontSize: 6, cellPadding: 1.5 } });
+    doc.save('Carga_' + ruta.replace(/ /g, '_') + '_' + desde + '_' + hasta + '.pdf');
+}
+</script>
+</body>
+</html>

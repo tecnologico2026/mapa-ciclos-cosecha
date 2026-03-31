@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consumo - Polinizacion</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+    <header>
+        <h1><a href="/polinizacion/">Agronomia</a> / Polinizacion</h1>
+    </header>
+    <nav class="site-nav">
+        <a href="/index.html">Mapa</a>
+        <a href="/polinizacion/carga.html">Carga CT</a>
+        <a href="/polinizacion/control-lineas.html">Control Lineas</a>
+        <a href="/polinizacion/consumo.html" class="active">Consumo</a>
+    </nav>
+    <div class="main">
+        <div class="filter-bar">
+            <label>Desde:</label>
+            <input type="date" id="consumo-desde">
+            <label>Hasta:</label>
+            <input type="date" id="consumo-hasta">
+            <label>Ruta:</label>
+            <select id="consumo-ruta-filter"><option value="">Todas</option></select>
+            <button class="btn-primary" onclick="loadConsumo()">Consultar</button>
+        </div>
+        <div class="card">
+            <h2>Consumo de Hormona</h2>
+            <div style="height:300px;margin-bottom:1rem"><canvas id="consumo-chart"></canvas></div>
+            <div id="consumo-table-container"><div class="loading">Selecciona rango de fechas</div></div>
+        </div>
+    </div>
+<script>
+var API_URL = 'https://script.google.com/macros/s/AKfycbxeTyNICdW_OsvdnyDwFTKo-Iy7oa_Qa-kMqwPbUdTMLkezveLUgYa4qceDFKgXBWI4/exec';
+var chart = null;
+
+(function() {
+    var today = new Date();
+    var monthAgo = new Date(today); monthAgo.setDate(today.getDate() - 30);
+    document.getElementById('consumo-desde').value = monthAgo.toISOString().slice(0, 10);
+    document.getElementById('consumo-hasta').value = today.toISOString().slice(0, 10);
+    loadConsumo();
+})();
+
+function loadConsumo() {
+    var desde = document.getElementById('consumo-desde').value;
+    var hasta = document.getElementById('consumo-hasta').value;
+    var ruta = document.getElementById('consumo-ruta-filter').value;
+    var container = document.getElementById('consumo-table-container');
+    container.innerHTML = '<div class="loading">Cargando...</div>';
+
+    var url = API_URL + '?action=consumo_historial&desde=' + desde + '&hasta=' + hasta;
+    if (ruta) url += '&ruta=' + encodeURIComponent(ruta);
+
+    fetch(url).then(function(r){return r.json();}).then(function(data) {
+        if (data.error) { container.innerHTML = '<div class="error">' + data.error + '</div>'; return; }
+
+        // Update ruta filter
+        if (data.rutas && data.rutas.length > 0) {
+            var sel = document.getElementById('consumo-ruta-filter');
+            var cur = sel.value;
+            sel.innerHTML = '<option value="">Todas</option>';
+            data.rutas.forEach(function(r) { sel.innerHTML += '<option value="' + r + '"' + (r === cur ? ' selected' : '') + '>' + r + '</option>'; });
+        }
+
+        var historial = data.historial || [];
+        if (historial.length === 0) { container.innerHTML = '<div class="loading">Sin datos</div>'; return; }
+
+        // Chart
+        var fechas = [], consumos = [], flores = [];
+        var byFecha = {};
+        historial.forEach(function(r) {
+            if (!byFecha[r.fecha]) byFecha[r.fecha] = { consumo: 0, flores: 0 };
+            byFecha[r.fecha].consumo += parseFloat(r.consumo_neto) || 0;
+            byFecha[r.fecha].flores += parseInt(r.flores_totales) || 0;
+        });
+        Object.keys(byFecha).sort().forEach(function(f) {
+            var p = f.split('-');
+            fechas.push(p[2] + '/' + p[1]);
+            consumos.push(byFecha[f].consumo);
+            flores.push(byFecha[f].flores);
+        });
+
+        var ctx = document.getElementById('consumo-chart');
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: fechas,
+                datasets: [
+                    { label: 'Consumo (g)', data: consumos, backgroundColor: 'rgba(129,140,248,0.6)', borderRadius: 4, yAxisID: 'y' },
+                    { label: 'Flores', data: flores, type: 'line', borderColor: '#22c55e', backgroundColor: 'transparent', tension: 0.3, yAxisID: 'y1' }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } },
+                    y: { position: 'left', ticks: { color: '#818cf8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y1: { position: 'right', ticks: { color: '#22c55e' }, grid: { display: false } }
+                }
+            }
+        });
+
+        // Table by ruta
+        var byRuta = {};
+        historial.forEach(function(r) {
+            if (!byRuta[r.ruta]) byRuta[r.ruta] = { entregada: 0, devuelta: 0, consumo: 0, flores: 0, registros: 0 };
+            byRuta[r.ruta].entregada += parseFloat(r.entregada) || 0;
+            byRuta[r.ruta].devuelta += parseFloat(r.devuelta) || 0;
+            byRuta[r.ruta].consumo += parseFloat(r.consumo_neto) || 0;
+            byRuta[r.ruta].flores += parseInt(r.flores_totales) || 0;
+            byRuta[r.ruta].registros += parseInt(r.registros) || 0;
+        });
+
+        var html = '<table><thead><tr><th>Ruta</th><th style="text-align:right">Entregada</th><th style="text-align:right">Devuelta</th><th style="text-align:right">Consumo</th><th style="text-align:right">Flores</th><th style="text-align:right">Prom g/flor</th></tr></thead><tbody>';
+        Object.keys(byRuta).sort().forEach(function(ruta) {
+            var r = byRuta[ruta];
+            var prom = r.flores > 0 ? (r.consumo / r.flores).toFixed(2) : '-';
+            html += '<tr><td style="font-weight:600">' + ruta + '</td>';
+            html += '<td style="text-align:right">' + r.entregada.toFixed(0) + '</td>';
+            html += '<td style="text-align:right">' + r.devuelta.toFixed(0) + '</td>';
+            html += '<td style="text-align:right;font-weight:700;color:#818cf8">' + r.consumo.toFixed(0) + '</td>';
+            html += '<td style="text-align:right;color:#22c55e">' + r.flores.toLocaleString('es') + '</td>';
+            html += '<td style="text-align:right;color:var(--text-muted)">' + prom + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }).catch(function(err) { container.innerHTML = '<div class="error">Error: ' + err.message + '</div>'; });
+}
+</script>
+</body>
+</html>

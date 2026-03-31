@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Lineas - Polinizacion</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <header>
+        <h1><a href="/polinizacion/">Agronomia</a> / Polinizacion</h1>
+    </header>
+    <nav class="site-nav">
+        <a href="/index.html">Mapa</a>
+        <a href="/polinizacion/carga.html">Carga CT</a>
+        <a href="/polinizacion/control-lineas.html" class="active">Control Lineas</a>
+        <a href="/polinizacion/consumo.html">Consumo</a>
+    </nav>
+    <div class="main">
+        <div class="filter-bar">
+            <label>Desde:</label>
+            <input type="date" id="cl-desde">
+            <label>Hasta:</label>
+            <input type="date" id="cl-hasta">
+            <label>Ruta:</label>
+            <select id="cl-ruta-filter"><option value="">Todas</option></select>
+            <button class="btn-primary" onclick="loadResumen()">Consultar</button>
+        </div>
+        <div class="card">
+            <h2>Cobertura de Lineas</h2>
+            <div id="cl-summary-container"><div class="loading">Selecciona ruta y rango de fechas</div></div>
+        </div>
+        <div class="card" id="cl-detail-card" style="display:none;margin-top:1rem">
+            <h2 id="cl-detail-title">Detalle Lote</h2>
+            <div id="cl-matrix-container"></div>
+        </div>
+    </div>
+<script>
+var API_URL = 'https://script.google.com/macros/s/AKfycbxeTyNICdW_OsvdnyDwFTKo-Iy7oa_Qa-kMqwPbUdTMLkezveLUgYa4qceDFKgXBWI4/exec';
+
+(function() {
+    var today = new Date();
+    var weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
+    document.getElementById('cl-desde').value = weekAgo.toISOString().slice(0, 10);
+    document.getElementById('cl-hasta').value = today.toISOString().slice(0, 10);
+
+    // Load rutas from API
+    var url = API_URL + '?action=control_lineas_resumen&desde=' + weekAgo.toISOString().slice(0,10) + '&hasta=' + today.toISOString().slice(0,10);
+    fetch(url).then(function(r){return r.json();}).then(function(data) {
+        if (data.rutas && data.rutas.length > 0) {
+            var sel = document.getElementById('cl-ruta-filter');
+            data.rutas.forEach(function(r) { sel.innerHTML += '<option value="' + r + '">' + r + '</option>'; });
+            sel.value = data.rutas[0];
+        }
+        loadResumen();
+    }).catch(function() { loadResumen(); });
+})();
+
+function loadResumen() {
+    var desde = document.getElementById('cl-desde').value;
+    var hasta = document.getElementById('cl-hasta').value;
+    var ruta = document.getElementById('cl-ruta-filter').value;
+    var container = document.getElementById('cl-summary-container');
+    document.getElementById('cl-detail-card').style.display = 'none';
+    container.innerHTML = '<div class="loading">Consultando cobertura de lineas...</div>';
+
+    var url = API_URL + '?action=control_lineas_resumen&desde=' + desde + '&hasta=' + hasta;
+    if (ruta) url += '&ruta=' + encodeURIComponent(ruta);
+
+    fetch(url).then(function(r){return r.json();}).then(function(data) {
+        if (data.error) { container.innerHTML = '<div class="error">' + data.error + '</div>'; return; }
+        if (data.rutas && data.rutas.length > 0) {
+            var sel = document.getElementById('cl-ruta-filter');
+            var cur = sel.value;
+            sel.innerHTML = '<option value="">Todas</option>';
+            data.rutas.forEach(function(r) { sel.innerHTML += '<option value="' + r + '"' + (r === cur ? ' selected' : '') + '>' + r + '</option>'; });
+        }
+        if (!data.resumen || data.resumen.length === 0) { container.innerHTML = '<div class="loading">Sin datos para el rango seleccionado</div>'; return; }
+        renderResumen(data.resumen, container);
+    }).catch(function(err) { container.innerHTML = '<div class="error">Error: ' + err.message + '</div>'; });
+}
+
+function renderResumen(resumen, container) {
+    var byRuta = {};
+    resumen.forEach(function(r) { if (!byRuta[r.ruta]) byRuta[r.ruta] = []; byRuta[r.ruta].push(r); });
+    var rutas = Object.keys(byRuta).sort();
+
+    function buildTable(items, startNum) {
+        var t = '<table style="width:100%;border-collapse:collapse;font-size:0.75rem">';
+        t += '<thead><tr style="background:rgba(255,255,255,0.05)">';
+        ['#','Lote','Lineas','Cub.','Dias','Cob.',''].forEach(function(h) {
+            t += '<th style="padding:0.4rem 0.5rem;text-align:center;border-bottom:2px solid var(--border);font-size:0.7rem">' + h + '</th>';
+        });
+        t += '</tr></thead><tbody>';
+        items.forEach(function(r, i) {
+            var pctColor = r.pct_cobertura >= 100 ? '#22c55e' : r.pct_cobertura >= 80 ? '#eab308' : '#ef4444';
+            var estado = r.pct_cobertura >= 100 ? '✓' : r.pct_cobertura >= 80 ? '⚠' : '✗';
+            t += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer" onclick="loadDetalle(\'' + r.lote + '\')" onmouseover="this.style.background=\'rgba(255,255,255,0.05)\'" onmouseout="this.style.background=\'transparent\'">';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center;color:var(--text-muted);font-size:0.65rem">' + (startNum + i) + '</td>';
+            t += '<td style="padding:0.3rem 0.4rem;font-weight:700">' + r.lote + '</td>';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center">' + r.max_linea + '</td>';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center">' + r.lineas_cubiertas + '</td>';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center">' + r.dias + '</td>';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center;font-weight:700;color:' + pctColor + '">' + r.pct_cobertura + '%</td>';
+            t += '<td style="padding:0.3rem 0.4rem;text-align:center;color:' + pctColor + '">' + estado + '</td>';
+            t += '</tr>';
+        });
+        t += '</tbody></table>';
+        return t;
+    }
+
+    var html = '';
+    rutas.forEach(function(ruta) {
+        var items = byRuta[ruta];
+        var ok = items.filter(function(r){return r.pct_cobertura >= 100;}).length;
+        var warn = items.filter(function(r){return r.pct_cobertura >= 80 && r.pct_cobertura < 100;}).length;
+        var fail = items.filter(function(r){return r.pct_cobertura < 80;}).length;
+
+        html += '<div style="margin-bottom:1.5rem">';
+        html += '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;flex-wrap:wrap">';
+        html += '<h3 style="font-size:0.9rem;font-weight:700;color:var(--text);margin:0">' + ruta + '</h3>';
+        html += '<span style="font-size:0.7rem;color:var(--text-muted)">' + items.length + ' lotes</span>';
+        if (ok > 0) html += '<span style="font-size:0.65rem;background:rgba(34,197,94,0.2);color:#22c55e;padding:2px 6px;border-radius:4px">' + ok + ' OK</span>';
+        if (warn > 0) html += '<span style="font-size:0.65rem;background:rgba(234,179,8,0.2);color:#eab308;padding:2px 6px;border-radius:4px">' + warn + ' parcial</span>';
+        if (fail > 0) html += '<span style="font-size:0.65rem;background:rgba(239,68,68,0.2);color:#ef4444;padding:2px 6px;border-radius:4px">' + fail + ' falta</span>';
+        html += '</div>';
+
+        if (items.length > 15) {
+            var half = Math.ceil(items.length / 2);
+            html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">';
+            html += '<div>' + buildTable(items.slice(0, half), 1) + '</div>';
+            html += '<div>' + buildTable(items.slice(half), half + 1) + '</div></div>';
+        } else { html += buildTable(items, 1); }
+        html += '</div>';
+    });
+    container.innerHTML = html;
+}
+
+function loadDetalle(lote) {
+    var desde = document.getElementById('cl-desde').value;
+    var hasta = document.getElementById('cl-hasta').value;
+    var detailCard = document.getElementById('cl-detail-card');
+    var matrixContainer = document.getElementById('cl-matrix-container');
+    var title = document.getElementById('cl-detail-title');
+
+    detailCard.style.display = 'block';
+    title.textContent = 'Detalle Lote: ' + lote;
+    matrixContainer.innerHTML = '<div class="loading">Cargando matriz de lineas...</div>';
+
+    var url = API_URL + '?action=control_lineas_detalle&lote=' + encodeURIComponent(lote) + '&desde=' + desde + '&hasta=' + hasta;
+    fetch(url).then(function(r){return r.json();}).then(function(data) {
+        if (data.error) { matrixContainer.innerHTML = '<div class="error">' + data.error + '</div>'; return; }
+        renderMatrix(data, matrixContainer);
+    }).catch(function(err) { matrixContainer.innerHTML = '<div class="error">Error: ' + err.message + '</div>'; });
+    detailCard.scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderMatrix(data, container) {
+    var dates = data.dates || [], matrix = data.matrix || [], maxLinea = data.max_linea || 0;
+    if (maxLinea === 0) { container.innerHTML = '<div class="loading">Sin datos de lineas para este lote</div>'; return; }
+    function fmtD(d) { var p = d.split('-'); return p[2] + '/' + p[1]; }
+
+    var html = '<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:0.7rem">';
+    html += '<thead><tr><th style="padding:0.3rem 0.5rem;border-bottom:2px solid var(--border);position:sticky;left:0;background:var(--card);z-index:1">Linea</th>';
+    dates.forEach(function(d) { html += '<th style="padding:0.3rem 0.4rem;border-bottom:2px solid var(--border);text-align:center;white-space:nowrap">' + fmtD(d) + '</th>'; });
+    html += '</tr></thead><tbody>';
+
+    for (var i = 0; i < maxLinea; i++) {
+        html += '<tr><td style="padding:0.2rem 0.5rem;font-weight:600;border-right:1px solid var(--border);position:sticky;left:0;background:var(--card);z-index:1">' + (i+1) + '</td>';
+        var row = matrix[i] || [];
+        for (var j = 0; j < dates.length; j++) {
+            var covered = row[j] === 1;
+            html += '<td style="padding:0.2rem 0.4rem;text-align:center;background:' + (covered ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.1)') + ';color:' + (covered ? '#22c55e' : '#ef4444') + ';font-size:0.65rem">' + (covered ? '✓' : '✗') + '</td>';
+        }
+        html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+</script>
+</body>
+</html>
