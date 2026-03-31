@@ -40,20 +40,14 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbxeTyNICdW_OsvdnyDwFTKo-I
 
 (function() {
     var today = new Date();
-    var weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
-    document.getElementById('cl-desde').value = weekAgo.toISOString().slice(0, 10);
+    document.getElementById('cl-desde').value = today.toISOString().slice(0, 10);
     document.getElementById('cl-hasta').value = today.toISOString().slice(0, 10);
 
-    // Load rutas from API
-    var url = API_URL + '?action=control_lineas_resumen&desde=' + weekAgo.toISOString().slice(0,10) + '&hasta=' + today.toISOString().slice(0,10);
-    fetch(url).then(function(r){return r.json();}).then(function(data) {
-        if (data.rutas && data.rutas.length > 0) {
-            var sel = document.getElementById('cl-ruta-filter');
-            data.rutas.forEach(function(r) { sel.innerHTML += '<option value="' + r + '">' + r + '</option>'; });
-            sel.value = data.rutas[0];
-        }
-        loadResumen();
-    }).catch(function() { loadResumen(); });
+    var RUTAS = ['2017-CAMBULOS','BANDA 5-6','BANDA 7-8-9','BANDA G2-3','CASA ZINC-LIQUIDA','CASA ZINC-POLVO','CORREDOR','ESCUELA','PONDEROSA','VIVIENDA'];
+    var sel = document.getElementById('cl-ruta-filter');
+    RUTAS.forEach(function(r) { sel.innerHTML += '<option value="' + r + '">' + r + '</option>'; });
+    sel.value = RUTAS[0];
+    loadResumen();
 })();
 
 function loadResumen() {

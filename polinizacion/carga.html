@@ -43,21 +43,15 @@ function mergeRuta(r) { return RUTAS_MERGE[r] || RUTAS_MERGE[(r||'').toUpperCase
 
 (function() {
     var today = new Date();
-    var weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
-    document.getElementById('desde').value = weekAgo.toISOString().slice(0, 10);
+    document.getElementById('desde').value = today.toISOString().slice(0, 10);
     document.getElementById('hasta').value = today.toISOString().slice(0, 10);
-})();
 
-// Load rutas from Apps Script
-fetch(API_URL + '?action=carga_operarios&desde=2026-01-01&hasta=2026-01-01').then(function(r){return r.json();}).then(function(data) {
-    if (!data.rutas) return;
+    var RUTAS = ['2017-CAMBULOS','BANDA 5-6','BANDA 7-8-9','BANDA G2-3','CASA ZINC','CASA ZINC-LIQUIDA','CASA ZINC-POLVO','CORREDOR','ESCUELA','PONDEROSA','VIVIENDA'];
     var sel = document.getElementById('ruta-filter');
-    var rutasSet = {};
-    data.rutas.forEach(function(r) { rutasSet[mergeRuta(r)] = true; });
-    var merged = Object.keys(rutasSet).sort();
-    merged.forEach(function(r) { sel.innerHTML += '<option value="' + r + '">' + r + '</option>'; });
-    if (merged.length > 0) { sel.value = merged[0]; loadData(); }
-});
+    RUTAS.forEach(function(r) { sel.innerHTML += '<option value="' + r + '">' + r + '</option>'; });
+    sel.value = RUTAS[0];
+    loadData();
+})();
 
 function loadData() {
     var desde = document.getElementById('desde').value;

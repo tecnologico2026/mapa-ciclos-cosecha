@@ -39,9 +39,14 @@ var chart = null;
 
 (function() {
     var today = new Date();
-    var monthAgo = new Date(today); monthAgo.setDate(today.getDate() - 30);
-    document.getElementById('consumo-desde').value = monthAgo.toISOString().slice(0, 10);
+    var weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
+    document.getElementById('consumo-desde').value = weekAgo.toISOString().slice(0, 10);
     document.getElementById('consumo-hasta').value = today.toISOString().slice(0, 10);
+
+    var RUTAS = ['2017-CAMBULOS','BANDA 5-6','BANDA 7-8-9','BANDA G2-3','CASA ZINC-LIQUIDA','CASA ZINC-POLVO','CORREDOR','ESCUELA','PONDEROSA','VIVIENDA'];
+    var sel = document.getElementById('consumo-ruta-filter');
+    RUTAS.forEach(function(r) { sel.innerHTML += '<option value="' + r + '">' + r + '</option>'; });
+    sel.value = RUTAS[0];
     loadConsumo();
 })();
 
